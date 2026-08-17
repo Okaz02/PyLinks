@@ -1,0 +1,10 @@
+"filename", "language", "JavaScript", "Python", "XML", "HTML", "PostCSS", "comment", "blank", "total"
+"c:\Users\kazuy\Desktop\PyLinks\GUI.py", "Python", 0, 14, 0, 0, 0, 0, 6, 20
+"c:\Users\kazuy\Desktop\PyLinks\web\block\blocks.js", "JavaScript", 51, 0, 0, 0, 0, 0, 3, 54
+"c:\Users\kazuy\Desktop\PyLinks\web\css\main.css", "PostCSS", 0, 0, 0, 0, 223, 0, 31, 254
+"c:\Users\kazuy\Desktop\PyLinks\web\image\add-icon.svg", "XML", 0, 0, 1, 0, 0, 0, 0, 1
+"c:\Users\kazuy\Desktop\PyLinks\web\image\close-icon.svg", "XML", 0, 0, 1, 0, 0, 0, 0, 1
+"c:\Users\kazuy\Desktop\PyLinks\web\index.html", "HTML", 0, 0, 0, 48, 0, 0, 10, 58
+"c:\Users\kazuy\Desktop\PyLinks\web\js\editor.js", "JavaScript", 74, 0, 0, 0, 0, 0, 24, 98
+"c:\Users\kazuy\Desktop\PyLinks\web\js\parser.js", "JavaScript", 165, 0, 0, 0, 0, 0, 37, 202
+"Total", "-", 290, 14, 2, 48, 223, 0, 111, 688
