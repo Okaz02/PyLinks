@@ -1,11 +1,12 @@
-const input_template = document.getElementById("input-template");
-const add_btn_template = document.getElementById("add-btn-template");
-const delete_btn_template = document.getElementById("delete-btn-template");
+const inputTemplate = document.getElementById("input-template");
+const addBtnTemplate = document.getElementById("add-btn-template");
+const addBlockBtnTemplate = document.getElementById("add-block-btn-template");
+const deleteBtnTemplate = document.getElementById("delete-btn-template");
 
 let pywebviewReady = !!window.pywebview;
 window.addEventListener('pywebviewready', () => { pywebviewReady = true; }, { once: true });
 
-function create_watcher(element) {
+function createWatcher(element) {
     let currentState = 'idle';
     let listeners = [];
 
@@ -26,89 +27,105 @@ function create_watcher(element) {
     };
 }
 
-function gen_label_element(element) {
+function createLabelElement(element) {
     const label = document.createElement("p");
     label.textContent = element.text;
     label.className = "block-label";
 
     return label;
 }
-function gen_input_element(element) {
-    if (element.input_type !== "text") {
-        console.error(`${element.input_type} is non-supported InputType`);
-    };
 
-    const input_fragment = input_template.content.cloneNode(true);
-    const input = input_fragment.querySelector(".input-field");
+function createInputElement(element) {
+    switch (element.input_type) {
+        case "text":
+            const inputFragment = inputTemplate.content.cloneNode(true);
+            const input = inputFragment.querySelector(".input-field");
 
-    input.getValue = () => ({ kind: "text", value: input.value });
-    input.onChangeValue = (callback) => {
-        ["input", "blur", "change"].forEach(eventName => {
-            input.addEventListener(eventName, () => callback(input.getValue(), eventName));
-        });
-    };
+            input.getValue = () => ({ kind: "text", value: input.value });
+            input.onChangeValue = (callback) => {
+                ["input", "blur", "change"].forEach(eventName => {
+                    input.addEventListener(eventName, () => callback(input.getValue(), eventName));
+                });
+            };
 
-    if (element.system) {
-        input.dataset.system = element.system;
+            if (element.system) {
+                input.dataset.system = element.system;
+            }
+
+            return input;
+        case "block":
+            const addBlockBtnFragment = addBlockBtnTemplate.content.cloneNode(true);
+            const addBlockBtn = addBlockBtnFragment.querySelector(".add-block-btn");
+
+            const watcher = createWatcher(addBlockBtn);
+            addBlockBtn.getValue = () => ({ kind: "state", value: watcher.getState() });
+            addBlockBtn.onChangeValue = (callback) => {
+                watcher.onChangeValue(state => callback(addBlockBtn.getValue(), state));
+            };
+
+            if (element.system) {
+                addBlockBtn.dataset.system = element.system;
+            }
+
+            return addBlockBtnFragment;
     }
-
-    return input;
 }
-function gen_button_add_element(element) {
-    const add_fragment = add_btn_template.content.cloneNode(true);
-    const add_button = add_fragment.querySelector(".btn-add");
 
-    add_button.addEventListener("click", () => {
+function createButtonAddElement(element) {
+    const addFragment = addBtnTemplate.content.cloneNode(true);
+    const addBtn = addFragment.querySelector(".btn-add");
+
+    addBtn.addEventListener("click", () => {
         element.target.forEach(target => {
-            const created = create_element(target);
+            const created = createElement(target);
 
             if (created) {
-                add_button.before(created);
+                addBtn.parentNode.insertBefore(created, addBtn);
             }
         });
     });
-    const watcher = create_watcher(add_button);
-    add_button.getValue = () => ({ kind: "state", value: watcher.getState() });
-    add_button.onChangeValue = (callback) => {
-        watcher.onChangeValue(state => callback(add_button.getValue(), state));
+    const watcher = createWatcher(addBtn);
+    addBtn.getValue = () => ({ kind: "state", value: watcher.getState() });
+    addBtn.onChangeValue = (callback) => {
+        watcher.onChangeValue(state => callback(addBtn.getValue(), state));
     };
 
     if (element.system) {
-        add_button.dataset.system = element.system;
+        addBtn.dataset.system = element.system;
     }
 
-    return add_button;
+    return addBtn;
 }
-function gen_button_delete_element(element) {
-    const delete_element = document.createElement("div");
-    delete_element.className = "delete";
+
+function createButtonDeleteElement(element) {
+    const deleteElement = document.createElement("div");
+    deleteElement.className = "delete";
 
     element.target.forEach(target => {
-        const created = create_element(target);
+        const created = createElement(target);
 
         if (created) {
-            delete_element.appendChild(created);
+            deleteElement.appendChild(created);
         }
     });
 
-    const delete_fragment = delete_btn_template.content.cloneNode(true);
-    const delete_button = delete_fragment.querySelector(".delete-btn");
+    const deleteFragment = deleteBtnTemplate.content.cloneNode(true);
+    const deleteBtn = deleteFragment.querySelector(".delete-btn");
 
-    delete_button.addEventListener("click", () => {
-        delete_element.remove();
+    deleteBtn.addEventListener("click", () => {
+        deleteElement.remove();
     });
 
+    deleteElement.appendChild(deleteBtn);
 
-    delete_element.appendChild(delete_button);
-
-    const watcher = create_watcher(delete_button);
-    delete_element.getValue = () => ({ kind: "state", value: watcher.getState() });
-    delete_element.onChangeValue = (callback) => {
-        watcher.onChangeValue(state => callback(delete_element.getValue(), state));
+    const watcher = createWatcher(deleteBtn);
+    deleteElement.getValue = () => ({ kind: "state", value: watcher.getState() });
+    deleteElement.onChangeValue = (callback) => {
+        watcher.onChangeValue(state => callback(deleteElement.getValue(), state));
     };
 
     if (element.system) {
-        delete_element.dataset.system = element.system;
+        deleteElement.dataset.system = element.system;
     }
 
     return delete_element;
@@ -121,7 +138,8 @@ async function runCheckLogic(checkName, payload) {
         case "import_module":
             if (payload.kind !== "text") {
                 console.error(`${payload.kind} is non-supported Kind`);
-            };
+                return false;
+            }
             return pywebview.api.check_module_exists(payload.value);
         default:
             console.error(`${checkName} is non-supported CheckName`);
@@ -132,7 +150,7 @@ async function runCheckLogic(checkName, payload) {
 class CheckedElement {
     constructor(element) {
         this.element = element;
-        this.warpEl = create_element(element.warp);
+        this.warpEl = createElement(element.warp);
         this.node = this.#build();
     }
 
@@ -159,7 +177,7 @@ class CheckedElement {
     #renderResult(targets = []) {
         this.node.querySelectorAll(".checked-result").forEach(el => el.remove());
         targets.forEach(t => {
-            const created = create_element(t);
+            const created = createElement(t);
             if (created) {
                 created.classList.add("checked-result");
                 this.node.appendChild(created);
@@ -172,43 +190,30 @@ class CheckedElement {
     }
 }
 
-function create_element(element) {
+function createElement(element) {
     switch (element.type) {
         case "label":
-            return gen_label_element(element);
-            break;
-
+            return createLabelElement(element);
         case "input":
-            return gen_input_element(element);
-            break;
-
+            return createInputElement(element);
         case "button":
             switch (element.action) {
                 case "add":
-                    return gen_button_add_element(element);
-                    break;
-
+                    return createButtonAddElement(element);
                 case "delete":
-                    return gen_button_delete_element(element);
-                    break;
-
+                    return createButtonDeleteElement(element);
                 default:
                     console.error(`${element.action} is non-supported type`);
-                    return;
-                    break;
+                    return null;
             }
-            break;
-
         case "checked":
             const instance = new CheckedElement(element);
             instance.runCheck();
             return instance.node;
-            break;
-
         default:
             console.error(`${element.type} is non-existent type`);
             return null;
-            break;
     }
 }
-export { create_element };
+
+export { createElement };

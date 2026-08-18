@@ -1,37 +1,37 @@
 import { blocksData } from '../block/blocks.js';
-import { create_element } from './parser.js';
+import { createElement } from './parser.js';
 
 let pywebviewReady = !!window.pywebview;
 window.addEventListener('pywebviewready', () => { pywebviewReady = true; }, { once: true });
 
-const block_template = document.getElementById("block-template");
-const control_block_template = document.getElementById("control-block-template");
+const blockTemplate = document.getElementById("block-template");
+const controlBlockTemplate = document.getElementById("control-block-template");
 
 const toolsBox = document.getElementById("tools-box");
-const toolsBox_input = document.getElementById("tools-box-input");
-const toolsBox_body = document.getElementById("tools-box-body");
+const toolsBoxInput = document.getElementById("tools-box-input");
+const toolsBoxBody = document.getElementById("tools-box-body");
 
-function create_block(block_data) {
-    const fragment = block_template.content.cloneNode(true);
+function createBlock(blockData) {
+    const fragment = blockTemplate.content.cloneNode(true);
     const block = fragment.querySelector(".block");
     const color = block.querySelector(".block-color");
     const slide = block.querySelector(".block-slide");
 
-    const block_slide = block_data.block_slide ?? [];
-    const block_back = block_data.block_back ?? [];
+    const blockSlide = blockData.block_slide ?? [];
+    const blockBack = blockData.block_back ?? [];
 
-    color.style.backgroundColor = block_data.block_color;
+    color.style.backgroundColor = blockData.block_color;
 
-    block_slide.forEach(element => {
-        const created = create_element(element);
+    blockSlide.forEach(element => {
+        const created = createElement(element);
 
         if (created) {
             slide.appendChild(created);
         }
     });
 
-    block_back.forEach(element => {
-        const created = create_element(element);
+    blockBack.forEach(element => {
+        const created = createElement(element);
 
         if (created) {
             block.appendChild(created);
@@ -41,39 +41,39 @@ function create_block(block_data) {
     return fragment;
 }
 
-function create_control_block(block_data) {
-    const fragment = control_block_template.content.cloneNode(true);
+function createControlBlock(blockData) {
+    const fragment = controlBlockTemplate.content.cloneNode(true);
     const control = fragment.querySelector(".control-block");
     const color = control.querySelector(".control-block-color");
     const header = control.querySelector(".control-block-header-content");
     const body = control.querySelector(".control-block-body-content");
 
-    const block_slide = block_data.block_slide ?? [];
-    const block_body = block_data.block_body ?? [];
-    const block_back = block_data.block_back ?? [];
+    const blockSlide = blockData.block_slide ?? [];
+    const blockBody = blockData.block_body ?? [];
+    const blockBack = blockData.block_back ?? [];
 
-    color.style.backgroundColor = block_data.block_color;
+    color.style.backgroundColor = blockData.block_color;
 
-    block_slide.forEach(element => {
-        const created = create_element(element);
+    blockSlide.forEach(element => {
+        const created = createElement(element);
 
         if (created) {
             header.appendChild(created);
         }
     });
 
-    block_body.forEach(element => {
+    blockBody.forEach(element => {
         const created = element.type === "control"
-            ? create_control_block(element)
-            : create_block(element);
+            ? createControlBlock(element)
+            : createBlock(element);
 
         if (created) {
             body.appendChild(created);
         }
     });
 
-    block_back.forEach(element => {
-        const created = create_element(element);
+    blockBack.forEach(element => {
+        const created = createElement(element);
 
         if (created) {
             header.appendChild(created);
@@ -85,8 +85,8 @@ function create_control_block(block_data) {
 
 blocksData.blocks.forEach(element => {
     const created = element.type === "control"
-        ? create_control_block(element)
-        : create_block(element);
+        ? createControlBlock(element)
+        : createBlock(element);
 
     if (created) {
         document.body.prepend(created);
@@ -97,12 +97,23 @@ document.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     const x = event.clientX;
     const y = event.clientY;
-    toolsBox.style.top = `${y}px`
-    toolsBox.style.left = `${x}px`
-
+    toolsBox.style.top = `${y}px`;
+    toolsBox.style.left = `${x}px`;
 });
 
-toolsBox_input.addEventListener("input", async () => {
+const addBlockBtns = document.querySelectorAll('[data-system="add-block"]');
+addBlockBtns.forEach(element => {
+    element.onChangeValue?.((payload, eventName) => {
+        if (eventName !== "released") return;
+        if (payload.kind !== "state") return;
+        const x = event.clientX;
+        const y = event.clientY;
+        toolsBox.style.top = `${y}px`;
+        toolsBox.style.left = `${x}px`;
+    });
+});
+
+toolsBoxInput.addEventListener("input", async () => {
     if (!pywebviewReady) return;
 
     const moduleInputs = document.querySelectorAll('[data-system="import_module"]');

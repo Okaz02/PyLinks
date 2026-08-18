@@ -49,6 +49,28 @@ export const blocksData = {
                     ]
                 }
             ]
+        },
+        {
+            "type": "block",
+            "block_label": "=",
+            "block_tag": "=",
+            "block_color": "#caaa40",
+            "block_slide": [
+                {
+                    "type": "input",
+                    "input_type": "block"
+                },
+                {
+                    "type": "label",
+                    "text": "="
+                },
+                {
+                    "type": "input",
+                    "input_type": "block",
+                    "system": "add-block"
+                }
+            ],
+            "block_back": []
         }
     ]
 }
