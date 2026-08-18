@@ -58,7 +58,7 @@ export const blocksData = {
             "block_slide": [
                 {
                     "type": "input",
-                    "input_type": "block"
+                    "input_type": "text"
                 },
                 {
                     "type": "label",

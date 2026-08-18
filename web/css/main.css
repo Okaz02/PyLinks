@@ -23,7 +23,7 @@ body {
 
 .block {
     width: max-content;
-    height: 40px;
+    min-height: 40px;
     color: white;
     border-radius: 10px;
     border: 3px solid rgb(70, 70, 70);
@@ -32,14 +32,13 @@ body {
     align-items: center;
     gap: 10px;
     padding-right: 10px;
-    margin-bottom: 20px;
     overflow: hidden;
 }
 
 .block-color {
-    height: 100%;
     width: 10px;
     flex-shrink: 0;
+    align-self: stretch;
 }
 
 .block-label {
@@ -266,6 +265,14 @@ body {
 .tools-box-function {
     color: white;
     margin: 0;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+}
+
+.tools-box-function:hover {
+    background-color: rgb(70, 70, 70);
 }
 
 .tools-box-group {

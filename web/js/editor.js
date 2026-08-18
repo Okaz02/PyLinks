@@ -11,6 +11,37 @@ const toolsBox = document.getElementById("tools-box");
 const toolsBoxInput = document.getElementById("tools-box-input");
 const toolsBoxBody = document.getElementById("tools-box-body");
 
+// フォーカスされたaddBlockBtnを追跡
+let focusedAddBlockBtn = null;
+
+// 関数をブロックデータに変換
+function createFunctionBlockData(moduleName, functionName) {
+    return {
+        type: "block",
+        block_label: functionName,
+        block_tag: "function_call",
+        block_color: "#3498db",
+        block_slide: [
+            { type: "label", text: `${functionName}(${moduleName})` }
+        ],
+        block_back: []
+    };
+}
+
+function addFunctionBlock(moduleName, functionName) {
+    const blockData = createFunctionBlockData(moduleName, functionName);
+    const created = createBlock(blockData);
+    console.log(focusedAddBlockBtn)
+
+    if (created) {
+        if (focusedAddBlockBtn) {
+            focusedAddBlockBtn.parentNode.insertBefore(created, focusedAddBlockBtn);
+        } else {
+            document.body.appendChild(created);
+        }
+    }
+}
+
 function createBlock(blockData) {
     const fragment = blockTemplate.content.cloneNode(true);
     const block = fragment.querySelector(".block");
@@ -104,6 +135,12 @@ document.addEventListener("contextmenu", (event) => {
 const addBlockBtns = document.querySelectorAll('[data-system="add-block"]');
 addBlockBtns.forEach(element => {
     element.onChangeValue?.((payload, eventName) => {
+        if (payload.kind === "state") {
+            if (eventName === "released") {
+                focusedAddBlockBtn = element;
+            }
+        }
+
         if (eventName !== "released") return;
         if (payload.kind !== "state") return;
         const x = event.clientX;
@@ -121,9 +158,9 @@ toolsBoxInput.addEventListener("input", async () => {
         .map(input => input.getValue().value)
         .filter(Boolean);
 
-    const functions = await pywebview.api.search_functions(["builtins", ...moduleNames], toolsBox_input.value);
+    const functions = await pywebview.api.search_functions(["builtins", ...moduleNames], toolsBoxInput.value);
 
-    toolsBox_body.innerHTML = "";
+    toolsBoxBody.innerHTML = "";
 
     Object.entries(functions).forEach(([moduleName, arr]) => {
         const details = document.createElement("details");
@@ -137,9 +174,15 @@ toolsBoxInput.addEventListener("input", async () => {
             const functionLabel = document.createElement("p");
             functionLabel.className = "tools-box-function";
             functionLabel.textContent = element;
+
+            functionLabel.addEventListener("click", () => {
+                addFunctionBlock(moduleName, element);
+                toolsBoxBody.innerHTML = "";
+            });
+
             details.appendChild(functionLabel);
         });
 
-        toolsBox_body.appendChild(details);
+        toolsBoxBody.appendChild(details);
     });
 })

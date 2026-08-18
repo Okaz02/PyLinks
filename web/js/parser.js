@@ -128,7 +128,7 @@ function createButtonDeleteElement(element) {
         deleteElement.dataset.system = element.system;
     }
 
-    return delete_element;
+    return deleteElement;
 }
 
 async function runCheckLogic(checkName, payload) {
