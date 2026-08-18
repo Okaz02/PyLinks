@@ -18,8 +18,10 @@ function createWatcher(element) {
 
     element.addEventListener('pointerenter', () => setState('hover'));
     element.addEventListener('pointerdown', () => setState('pressing'));
-    element.addEventListener('pointerup', () => setState('released'));
-    element.addEventListener('pointerleave', () => setState('idle'));
+    element.addEventListener('pointerup', () => setState('focused'));
+    element.addEventListener('pointerleave', () => {
+        if (currentState !== 'focused') setState('idle');
+    });
 
     return {
         getState: () => currentState,

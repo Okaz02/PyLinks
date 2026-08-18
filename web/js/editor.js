@@ -136,7 +136,7 @@ const addBlockBtns = document.querySelectorAll('[data-system="add-block"]');
 addBlockBtns.forEach(element => {
     element.onChangeValue?.((payload, eventName) => {
         if (payload.kind === "state") {
-            if (eventName === "released") {
+            if (eventName === "focused") {
                 focusedAddBlockBtn = element;
             }
         }
