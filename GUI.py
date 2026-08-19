@@ -146,6 +146,50 @@ class Api:
             for func_name in func_names
         ]
 
+    def get_function_signature(self, module_name: str, func_name: str) -> dict:
+        """
+        指定した関数のシグネチャ情報を取得する。
+        引数情報を {名前: デフォルト値} の形式で返す。
+        """
+        if not self.check_module_exists(module_name):
+            return {"params": [], "error": f"Module {module_name} not found"}
+
+        try:
+            if module_name == "builtins" or (
+                hasattr(builtins, func_name)
+                and not importlib.util.find_spec(module_name)
+            ):
+                module = builtins
+            else:
+                module = importlib.import_module(module_name)
+        except Exception as e:
+            return {"params": [], "error": str(e)}
+
+        func = getattr(module, func_name, None)
+        if not callable(func):
+            return {"params": [], "error": f"{func_name} is not callable"}
+
+        try:
+            sig = inspect.signature(func)
+            params = []
+            for param_name, param in sig.parameters.items():
+                if param_name in ("self", "cls"):
+                    continue
+                params.append(
+                    {
+                        "name": param_name,
+                        "default": (
+                            str(param.default)
+                            if param.default != inspect.Parameter.empty
+                            else None
+                        ),
+                        "kind": str(param.kind),
+                    }
+                )
+            return {"params": params, "error": None}
+        except (ValueError, TypeError):
+            return {"params": [], "error": "Could not get signature"}
+
 
 if __name__ == "__main__":
     api = Api()

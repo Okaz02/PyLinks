@@ -66,8 +66,16 @@ export const blocksData = {
                 },
                 {
                     "type": "input",
+                    "input_type": "text"
+                },
+                {
+                    "type": "input",
                     "input_type": "block",
                     "system": "add-block"
+                },
+                {
+                    "type": "input",
+                    "input_type": "text"
                 }
             ],
             "block_back": []

@@ -11,36 +11,140 @@ const toolsBox = document.getElementById("tools-box");
 const toolsBoxInput = document.getElementById("tools-box-input");
 const toolsBoxBody = document.getElementById("tools-box-body");
 
-// フォーカスされたaddBlockBtnを追跡
-let focusedAddBlockBtn = null;
+function createFunctionBlockData(moduleName, functionName, params = []) {
+    if (moduleName === "builtins") {
+        moduleName = "";
+    } else {
+        moduleName += ".";
+    }
+    const blockSlide = [
+        { type: "label", text: `${moduleName}${functionName}(` }
+    ];
 
-// 関数をブロックデータに変換
-function createFunctionBlockData(moduleName, functionName) {
+    params.forEach((param, index) => {
+        if (index > 0) {
+            blockSlide.push({ type: "label", text: "," });
+        }
+        blockSlide.push({
+            type: "input",
+            input_type: "text"
+        });
+    });
+
+    blockSlide.push({ type: "label", text: `)` })
+
     return {
         type: "block",
         block_label: functionName,
         block_tag: "function_call",
         block_color: "#3498db",
-        block_slide: [
-            { type: "label", text: `${functionName}(${moduleName})` }
-        ],
+        block_slide: blockSlide,
         block_back: []
     };
 }
 
-function addFunctionBlock(moduleName, functionName) {
-    const blockData = createFunctionBlockData(moduleName, functionName);
+// トップレベルのブロックのうち、指定Y座標より下にある最初の要素を返す
+// （ドロップした高さに応じて、縦積みの並びの中の適切な位置に挿入するため）
+function getTopLevelBlockBelow(y) {
+    const topLevelBlocks = Array.from(document.body.children).filter(el =>
+        el.classList.contains("block") || el.classList.contains("control-block")
+    );
+    return topLevelBlocks.find(el => el.getBoundingClientRect().top > y) || null;
+}
+
+async function addFunctionBlock(moduleName, functionName, dropY) {
+    // シグネチャ情報を取得
+    const sig = await pywebview.api.get_function_signature(moduleName, functionName);
+    const params = sig.params || [];
+
+    const blockData = createFunctionBlockData(moduleName, functionName, params);
     const created = createBlock(blockData);
-    console.log(focusedAddBlockBtn)
 
     if (created) {
-        if (focusedAddBlockBtn) {
-            focusedAddBlockBtn.parentNode.insertBefore(created, focusedAddBlockBtn);
-        } else {
-            document.body.appendChild(created);
-        }
+        const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
+        document.body.insertBefore(created, ref);
     }
 }
+
+async function addFunctionBlockToInput(moduleName, functionName, container, segment, offset) {
+    // シグネチャ情報を取得
+    const sig = await pywebview.api.get_function_signature(moduleName, functionName);
+    const params = sig.params || [];
+
+    const blockData = createFunctionBlockData(moduleName, functionName, params);
+    const created = createBlock(blockData);
+
+    if (created) {
+        const blockElement = created.querySelector?.(".block") || created;
+        blockElement.classList.add("function-chip");
+        container.insertChip(blockElement, segment, offset);
+    }
+}
+
+// グローバルに割り当て
+window.addFunctionBlockToInput = addFunctionBlockToInput;
+
+// ブロック全体の選択・キーボード削除
+let selectedBlock = null;
+
+function selectBlock(block) {
+    if (selectedBlock === block) return;
+    deselectBlock();
+    selectedBlock = block;
+    selectedBlock.classList.add("selected");
+}
+
+function deselectBlock() {
+    if (selectedBlock) {
+        selectedBlock.classList.remove("selected");
+        selectedBlock = null;
+    }
+}
+
+document.body.addEventListener("click", (e) => {
+    // 入力欄やボタンの操作中はブロックの選択状態を触らない（フォーカス・編集を優先する）
+    if (e.target.closest?.('input, textarea, button')) {
+        return;
+    }
+
+    const block = e.target.closest(".block, .control-block");
+    if (block) {
+        selectBlock(block);
+    } else {
+        deselectBlock();
+    }
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    if (!selectedBlock) return;
+
+    const active = document.activeElement;
+    const isEditing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+    if (isEditing) return;
+
+    e.preventDefault();
+    selectedBlock.remove();
+    selectedBlock = null;
+});
+
+// body の何もない場所だけをドロップターゲット化する
+// （他のブロックやツールボックスの上にドロップしても新規ブロックを作らない）
+document.body.addEventListener("dragover", (e) => {
+    if (e.target !== document.body) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+});
+
+document.body.addEventListener("drop", (e) => {
+    if (e.target !== document.body) return;
+    e.preventDefault();
+    const data = e.dataTransfer.getData("application/json");
+    if (data) {
+        const { moduleName, functionName } = JSON.parse(data);
+        addFunctionBlock(moduleName, functionName, e.clientY);
+    }
+});
 
 function createBlock(blockData) {
     const fragment = blockTemplate.content.cloneNode(true);
@@ -132,24 +236,6 @@ document.addEventListener("contextmenu", (event) => {
     toolsBox.style.left = `${x}px`;
 });
 
-const addBlockBtns = document.querySelectorAll('[data-system="add-block"]');
-addBlockBtns.forEach(element => {
-    element.onChangeValue?.((payload, eventName) => {
-        if (payload.kind === "state") {
-            if (eventName === "focused") {
-                focusedAddBlockBtn = element;
-            }
-        }
-
-        if (eventName !== "released") return;
-        if (payload.kind !== "state") return;
-        const x = event.clientX;
-        const y = event.clientY;
-        toolsBox.style.top = `${y}px`;
-        toolsBox.style.left = `${x}px`;
-    });
-});
-
 toolsBoxInput.addEventListener("input", async () => {
     if (!pywebviewReady) return;
 
@@ -174,10 +260,14 @@ toolsBoxInput.addEventListener("input", async () => {
             const functionLabel = document.createElement("p");
             functionLabel.className = "tools-box-function";
             functionLabel.textContent = element;
+            functionLabel.draggable = true;
 
-            functionLabel.addEventListener("click", () => {
-                addFunctionBlock(moduleName, element);
-                toolsBoxBody.innerHTML = "";
+            functionLabel.addEventListener("dragstart", (e) => {
+                e.dataTransfer.effectAllowed = "copy";
+                e.dataTransfer.setData("application/json", JSON.stringify({
+                    moduleName: moduleName,
+                    functionName: element
+                }));
             });
 
             details.appendChild(functionLabel);

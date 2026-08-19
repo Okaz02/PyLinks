@@ -37,39 +37,180 @@ function createLabelElement(element) {
     return label;
 }
 
+// input要素内のクリック/ドロップX座標を文字オフセットに変換する
+// （contentEditableのRange APIが使えないネイティブ<input>向けに、
+//  同じフォントでcanvasに描いて文字幅を測ることで近似する）
+let measureCtx = null;
+function getTextOffsetAtX(inputEl, clientX) {
+    measureCtx ??= document.createElement("canvas").getContext("2d");
+    const style = getComputedStyle(inputEl);
+    measureCtx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+    const rect = inputEl.getBoundingClientRect();
+    const x = clientX - rect.left - (parseFloat(style.paddingLeft) || 0) + inputEl.scrollLeft;
+
+    const text = inputEl.value;
+    let widthSoFar = 0;
+    for (let i = 0; i < text.length; i++) {
+        const charWidth = measureCtx.measureText(text[i]).width;
+        if (widthSoFar + charWidth / 2 > x) return i;
+        widthSoFar += charWidth;
+    }
+    return text.length;
+}
+
+// テキストと埋め込みチップ(.function-chip)が交互に並ぶ入力欄。
+// 各テキスト片はネイティブ<input>なので、キャレット移動や改行禁止は
+// ブラウザ標準の挙動に任せられる。チップをまたぐ移動/削除だけを自前で扱う
+function createTextInputElement(element) {
+    const container = document.createElement("div");
+    container.className = "input-text-container";
+
+    const listeners = [];
+    const notify = (eventName) => listeners.forEach(cb => cb(container.getValue(), eventName));
+    const getSegments = () => Array.from(container.children).filter(el => el.classList.contains("segment-input"));
+    const focusSegment = (input, pos) => {
+        input.focus();
+        input.setSelectionRange(pos, pos);
+    };
+
+    // prevとnextの間のchipを消して1つのinputに統合する
+    const mergeAcrossChip = (prevInput, chip, nextInput) => {
+        const mergedPos = prevInput.value.length;
+        prevInput.value += nextInput.value;
+        chip.remove();
+        nextInput.remove();
+        focusSegment(prevInput, mergedPos);
+        notify("input");
+    };
+
+    const handleSegmentKeydown = (e, input) => {
+        const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+        const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+
+        if (e.key === "ArrowLeft" && atStart) {
+            const prevChip = input.previousElementSibling;
+            const prevInput = prevChip?.previousElementSibling;
+            if (prevChip?.classList.contains("function-chip") && prevInput) {
+                e.preventDefault();
+                focusSegment(prevInput, prevInput.value.length);
+            }
+        } else if (e.key === "ArrowRight" && atEnd) {
+            const nextChip = input.nextElementSibling;
+            const nextInput = nextChip?.nextElementSibling;
+            if (nextChip?.classList.contains("function-chip") && nextInput) {
+                e.preventDefault();
+                focusSegment(nextInput, 0);
+            }
+        } else if (e.key === "Backspace" && atStart) {
+            const prevChip = input.previousElementSibling;
+            const prevInput = prevChip?.previousElementSibling;
+            if (prevChip?.classList.contains("function-chip") && prevInput) {
+                e.preventDefault();
+                mergeAcrossChip(prevInput, prevChip, input);
+            }
+        } else if (e.key === "Delete" && atEnd) {
+            const nextChip = input.nextElementSibling;
+            const nextInput = nextChip?.nextElementSibling;
+            if (nextChip?.classList.contains("function-chip") && nextInput) {
+                e.preventDefault();
+                mergeAcrossChip(input, nextChip, nextInput);
+            }
+        }
+    };
+
+    const createSegment = (value = "") => {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "segment-input";
+        input.value = value;
+        input.addEventListener("input", () => notify("input"));
+        input.addEventListener("keydown", (e) => handleSegmentKeydown(e, input));
+        return input;
+    };
+
+    container.appendChild(createSegment());
+
+    container.getValue = () => ({ kind: "text", value: getSegments().map(input => input.value).join("") });
+    container.onChangeValue = (callback) => { listeners.push(callback); };
+    container.addEventListener("focusout", (e) => {
+        if (!container.contains(e.relatedTarget)) notify("blur");
+    });
+
+    // シグネチャ取得後に呼ばれる。指定segmentのoffset位置でテキストを分割し、間にチップを挟む
+    container.insertChip = (chipElement, segment, offset) => {
+        const segments = getSegments();
+        const target = (segment && container.contains(segment)) ? segment : segments[segments.length - 1];
+
+        if (!target) {
+            container.appendChild(chipElement);
+        } else {
+            const pos = Math.min(Math.max(offset ?? target.value.length, 0), target.value.length);
+            const tail = createSegment(target.value.slice(pos));
+            target.value = target.value.slice(0, pos);
+            target.after(chipElement, tail);
+        }
+        notify("input");
+    };
+
+    if (element.system) {
+        container.dataset.system = element.system;
+    }
+
+    // チップのラベル等（そのチップ自身の入力欄ではない部分）へのドロップは無視する。
+    // チップ自身の入力欄はそちらのdropハンドラがstopPropagationするため、
+    // ここに伝播してくる時点で非対話部分へのドロップだと分かる
+    const isDropOnChipDecoration = (e) => {
+        const chip = e.target.closest?.(".function-chip");
+        return !!chip && container.contains(chip);
+    };
+
+    const distanceToX = (el, x) => {
+        const r = el.getBoundingClientRect();
+        return x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    };
+    const findNearestSegment = (x, y) => {
+        const segments = getSegments();
+        if (segments.length === 0) return null;
+        const sameRow = segments.filter(el => {
+            const r = el.getBoundingClientRect();
+            return y >= r.top && y <= r.bottom;
+        });
+        const candidates = sameRow.length ? sameRow : segments;
+        return candidates.reduce((closest, el) => distanceToX(el, x) < distanceToX(closest, x) ? el : closest);
+    };
+
+    container.addEventListener("dragover", (e) => {
+        if (isDropOnChipDecoration(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        container.classList.add("dragover");
+    });
+    container.addEventListener("dragleave", (e) => {
+        if (!container.contains(e.relatedTarget)) container.classList.remove("dragover");
+    });
+    container.addEventListener("drop", (e) => {
+        if (isDropOnChipDecoration(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        container.classList.remove("dragover");
+
+        const data = e.dataTransfer.getData("application/json");
+        if (!data) return;
+        const { moduleName, functionName } = JSON.parse(data);
+
+        const target = e.target.classList?.contains("segment-input") ? e.target : findNearestSegment(e.clientX, e.clientY);
+        const offset = target ? getTextOffsetAtX(target, e.clientX) : 0;
+        window.addFunctionBlockToInput(moduleName, functionName, container, target, offset);
+    });
+
+    return container;
+}
+
 function createInputElement(element) {
     switch (element.input_type) {
         case "text":
-            const inputFragment = inputTemplate.content.cloneNode(true);
-            const input = inputFragment.querySelector(".input-field");
-
-            input.getValue = () => ({ kind: "text", value: input.value });
-            input.onChangeValue = (callback) => {
-                ["input", "blur", "change"].forEach(eventName => {
-                    input.addEventListener(eventName, () => callback(input.getValue(), eventName));
-                });
-            };
-
-            if (element.system) {
-                input.dataset.system = element.system;
-            }
-
-            return input;
-        case "block":
-            const addBlockBtnFragment = addBlockBtnTemplate.content.cloneNode(true);
-            const addBlockBtn = addBlockBtnFragment.querySelector(".add-block-btn");
-
-            const watcher = createWatcher(addBlockBtn);
-            addBlockBtn.getValue = () => ({ kind: "state", value: watcher.getState() });
-            addBlockBtn.onChangeValue = (callback) => {
-                watcher.onChangeValue(state => callback(addBlockBtn.getValue(), state));
-            };
-
-            if (element.system) {
-                addBlockBtn.dataset.system = element.system;
-            }
-
-            return addBlockBtnFragment;
+            return createTextInputElement(element);
     }
 }
 

@@ -118,6 +118,46 @@ body {
     margin: 0;
 }
 
+.input-field:dragover {
+    background-color: #e0e0e0;
+}
+
+.input-text-container {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    padding: 3px 10px;
+    background-color: #fff;
+    color: #222;
+    min-height: 20px;
+    min-width: 35px;
+    width: fit-content;
+    outline: none;
+}
+
+.input-text-container.dragover {
+    background-color: #f0f0f0;
+}
+
+.segment-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    padding: 0;
+    margin: 0;
+    min-width: 4px;
+    field-sizing: content;
+}
+
+.function-chip {
+    margin: 0 4px;
+    user-select: none;
+}
+
 .btn-add {
     width: 20px;
     height: 20px;
@@ -153,6 +193,12 @@ body {
     background-color: rgb(53, 53, 53);
     overflow: hidden;
     margin-bottom: 20px;
+}
+
+.block.selected,
+.control-block.selected {
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.5);
 }
 
 .control-block-header {
@@ -267,10 +313,11 @@ body {
 .tools-box-function {
     color: white;
     margin: 0;
-    cursor: pointer;
+    cursor: move;
     padding: 5px 10px;
     border-radius: 5px;
     transition: background-color 0.2s;
+    user-select: none;
 }
 
 .tools-box-function:hover {
