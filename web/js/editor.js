@@ -12,13 +12,14 @@ const toolsBoxInput = document.getElementById("tools-box-input");
 const toolsBoxBody = document.getElementById("tools-box-body");
 
 function createFunctionBlockData(moduleName, functionName, params = []) {
+    let labelName = "";
     if (moduleName === "builtins") {
-        moduleName = "";
+         labelName = functionName
     } else {
-        moduleName += ".";
+         labelName = `${moduleName}${functionName}(`;
     }
     const blockSlide = [
-        { type: "label", text: `${moduleName}${functionName}(` }
+        { type: "label", text: labelName}
     ];
 
     params.forEach((param, index) => {
@@ -35,6 +36,7 @@ function createFunctionBlockData(moduleName, functionName, params = []) {
 
     return {
         type: "block",
+        block_module: moduleName,
         block_label: functionName,
         block_tag: "function_call",
         block_color: "#3498db",
@@ -54,6 +56,7 @@ function getTopLevelBlockBelow(y) {
 
 async function addFunctionBlock(moduleName, functionName, dropY) {
     // シグネチャ情報を取得
+    if (!pywebviewReady) return;
     const sig = await pywebview.api.get_function_signature(moduleName, functionName);
     const params = sig.params || [];
 
@@ -68,6 +71,7 @@ async function addFunctionBlock(moduleName, functionName, dropY) {
 
 async function addFunctionBlockToInput(moduleName, functionName, container, segment, offset) {
     // シグネチャ情報を取得
+    if (!pywebviewReady) return;
     const sig = await pywebview.api.get_function_signature(moduleName, functionName);
     const params = sig.params || [];
 
@@ -100,7 +104,11 @@ function deselectBlock() {
         selectedBlock = null;
     }
 }
-
+async function searchdocument(block){
+    if (!pywebviewReady) return;
+    const  doc = await pywebview.api.get_translated_doc(block.getModuleName,block.getFuncName);
+    console.log(doc);
+}
 document.body.addEventListener("click", (e) => {
     // 入力欄やボタンの操作中はブロックの選択状態を触らない（フォーカス・編集を優先する）
     if (e.target.closest?.('input, textarea, button')) {
@@ -110,6 +118,7 @@ document.body.addEventListener("click", (e) => {
     const block = e.target.closest(".block, .control-block");
     if (block) {
         selectBlock(block);
+        searchdocument(block);
     } else {
         deselectBlock();
     }
@@ -172,6 +181,8 @@ function createBlock(blockData) {
             block.appendChild(created);
         }
     });
+    block.getFuncName = blockData.block_label;
+    block.getModuleName = blockData.block_module;
 
     return fragment;
 }
@@ -215,6 +226,8 @@ function createControlBlock(blockData) {
         }
     });
 
+    control.getFuncName = blockData.block_label;
+    control.getModuleName = blockData.block_module;
     return fragment;
 }
 
