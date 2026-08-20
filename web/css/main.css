@@ -15,10 +15,13 @@
 * {
     font-family: "Regular EN Font", "Regular JP Font", sans-serif;
 }
-
+html {
+   height: 100%;
+}
 body {
     position: relative;
     background-color: black;
+    height: 100%;
 }
 
 .block {
@@ -124,7 +127,7 @@ body {
 
 .input-text-container {
     display: inline-flex;
-    flex-wrap: wrap;
+    white-space: nowrap;
     align-items: center;
     border: 1px solid #ccc;
     border-radius: 10px;
@@ -132,7 +135,6 @@ body {
     background-color: #fff;
     color: #222;
     min-height: 20px;
-    min-width: 35px;
     width: fit-content;
     outline: none;
 }
@@ -149,7 +151,6 @@ body {
     color: inherit;
     padding: 0;
     margin: 0;
-    min-width: 4px;
     field-sizing: content;
 }
 
