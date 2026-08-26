@@ -11,6 +11,8 @@ const toolsBox = document.getElementById("tools-box");
 const toolsBoxInput = document.getElementById("tools-box-input");
 const toolsBoxBody = document.getElementById("tools-box-body");
 
+const documentBox = document.getElementById("document-box");
+
 function createFunctionBlockData(moduleName, functionName, params = []) {
     let labelName = "";
     if (moduleName === "builtins") {
@@ -106,9 +108,10 @@ function deselectBlock() {
 }
 async function searchdocument(block) {
     if (!pywebviewReady) return;
-    const doc = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
-    console.log(doc);
+    const result = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
+    documentBox.textContent = result.error ? result.error : result.doc;
 }
+
 document.body.addEventListener("click", (e) => {
     // 入力欄やボタンの操作中はブロックの選択状態を触らない（フォーカス・編集を優先する）
     if (e.target.closest?.('input, textarea, button')) {

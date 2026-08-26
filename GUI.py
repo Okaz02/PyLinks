@@ -4,6 +4,17 @@ import importlib.util
 import inspect
 import builtins
 from typing import Optional
+import requests
+from bs4 import BeautifulSoup
+
+# Google翻訳(モバイル版)はUser-Agentが無いリクエストをボットとみなし拒否するため、
+# ブラウザを偽装するヘッダーを付与する。
+_TRANSLATE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    )
+}
 
 
 class Api:
@@ -189,6 +200,78 @@ class Api:
             return {"params": params, "error": None}
         except (ValueError, TypeError):
             return {"params": [], "error": "Could not get signature"}
+
+    def get_translated_doc(self, module_name: str, func_name: str) -> dict:
+        """
+        指定した関数のドキュメント(docstring)を取得し、日本語に翻訳して返す。
+        """
+        if not self.check_module_exists(module_name):
+            return {"doc": None, "error": f"Module {module_name} not found"}
+
+        try:
+            if module_name == "builtins" or (
+                hasattr(builtins, func_name)
+                and not importlib.util.find_spec(module_name)
+            ):
+                module = builtins
+            else:
+                module = importlib.import_module(module_name)
+        except Exception as e:
+            return {"doc": None, "error": str(e)}
+
+        func = getattr(module, func_name, None)
+        if not callable(func):
+            return {"doc": None, "error": f"{func_name} is not callable"}
+
+        doc = inspect.getdoc(func)
+        if not doc:
+            return {"doc": None, "error": "No documentation available"}
+
+        try:
+            translated = self._translate_to_japanese(doc)
+        except Exception as e:
+            return {"doc": doc, "error": f"Translation failed: {e}"}
+
+        return {"doc": translated, "error": None}
+
+    def _translate_to_japanese(self, text: str) -> str:
+        """
+        Google翻訳(モバイル版エンドポイント)の1回あたりの文字数制限を考慮し、
+        テキストを行単位のチャンクに分けてから日本語に翻訳して結合する。
+        """
+        max_chunk_size = 4500
+
+        lines = text.splitlines()
+        chunks = []
+        current = ""
+        for line in lines:
+            candidate = f"{current}\n{line}" if current else line
+            if len(candidate) > max_chunk_size and current:
+                chunks.append(current)
+                current = line
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+
+        translated_chunks = [self._translate_chunk(chunk) for chunk in chunks]
+        return "\n".join(translated_chunks)
+
+    def _translate_chunk(self, text: str) -> str:
+        response = requests.get(
+            "https://translate.google.com/m",
+            params={"sl": "en", "tl": "ja", "q": text},
+            headers=_TRANSLATE_HEADERS,
+            timeout=10,
+        )
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        element = soup.find("div", {"class": "result-container"})
+        if element is None:
+            raise RuntimeError("Could not parse translation result")
+
+        return element.get_text(strip=True)
 
 
 if __name__ == "__main__":
