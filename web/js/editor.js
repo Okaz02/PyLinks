@@ -14,12 +14,12 @@ const toolsBoxBody = document.getElementById("tools-box-body");
 function createFunctionBlockData(moduleName, functionName, params = []) {
     let labelName = "";
     if (moduleName === "builtins") {
-         labelName = functionName
+        labelName = `${functionName}(`
     } else {
-         labelName = `${moduleName}${functionName}(`;
+        labelName = `${moduleName}${functionName}(`;
     }
     const blockSlide = [
-        { type: "label", text: labelName}
+        { type: "label", text: labelName }
     ];
 
     params.forEach((param, index) => {
@@ -104,9 +104,9 @@ function deselectBlock() {
         selectedBlock = null;
     }
 }
-async function searchdocument(block){
+async function searchdocument(block) {
     if (!pywebviewReady) return;
-    const  doc = await pywebview.api.get_translated_doc(block.getModuleName,block.getFuncName);
+    const doc = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
     console.log(doc);
 }
 document.body.addEventListener("click", (e) => {
