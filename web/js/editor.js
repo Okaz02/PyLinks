@@ -110,6 +110,7 @@ function deselectBlock() {
 async function searchdocument(block) {
     if (!pywebviewReady) return;
     const spinFragment = spinTemplate.content.cloneNode(true);
+    spinFragment.classList.add("")
     documentBox.textContent = "";
     documentBox.appendChild(spinFragment);
     const result = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
