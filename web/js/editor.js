@@ -4,6 +4,7 @@ import { createElement } from './parser.js';
 let pywebviewReady = !!window.pywebview;
 window.addEventListener('pywebviewready', () => { pywebviewReady = true; }, { once: true });
 
+const spinTemplate = document.getElementById("spin-template");
 const blockTemplate = document.getElementById("block-template");
 const controlBlockTemplate = document.getElementById("control-block-template");
 
@@ -108,6 +109,9 @@ function deselectBlock() {
 }
 async function searchdocument(block) {
     if (!pywebviewReady) return;
+    const spinFragment = spinTemplate.content.cloneNode(true);
+    documentBox.textContent = "";
+    documentBox.appendChild(spinFragment);
     const result = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
     documentBox.textContent = result.error ? result.error : result.doc;
 }
