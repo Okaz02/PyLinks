@@ -21,9 +21,28 @@ html {
 }
 
 body {
-    position: relative;
+    display: flex;
+    flex-direction: column;
     background-color: black;
     height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+#workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+#blocks-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
 }
 
 .block {
@@ -312,6 +331,8 @@ body {
 
 #tools-box {
     position: fixed;
+    top: 0;
+    left: 0;
     width: 300px;
     height: 500px;
     box-sizing: border-box;
@@ -365,17 +386,14 @@ body {
 }
 
 #document-box {
-    position: fixed;
+    flex: 0 0 40vw;
     width: 40vw;
-    margin: 20px;
+    box-sizing: border-box;
     padding: 20px;
     border-radius: 10px;
     border: 3px solid rgb(70, 70, 70);
     background-color: rgb(53, 53, 53);
     color: white;
-    top: 0;
-    right: 0;
-    bottom: 0;
     white-space: pre-wrap;
     overflow-y: auto;
     display: flex;
@@ -388,9 +406,7 @@ body {
 }
 
 #tab {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 10px;
+    flex: 0 0 auto;
+    height: 20px;
+    background-color: rgb(53, 53, 53);
 }
