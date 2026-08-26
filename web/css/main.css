@@ -15,9 +15,11 @@
 * {
     font-family: "Regular EN Font", "Regular JP Font", sans-serif;
 }
+
 html {
-   height: 100%;
+    height: 100%;
 }
+
 body {
     position: relative;
     background-color: black;
@@ -336,6 +338,7 @@ body {
     border-radius: 10px;
     border: 3px solid rgb(70, 70, 70);
     background-color: rgb(53, 53, 53);
+    color: white;
     top: 0;
     right: 0;
     bottom: 0;
