@@ -3,6 +3,7 @@ import importlib
 import importlib.util
 import inspect
 import builtins
+import html
 from typing import Optional
 from deep_translator import MyMemoryTranslator
 
@@ -245,7 +246,9 @@ class Api:
             chunks.append(current)
 
         translator = MyMemoryTranslator(source="en-US", target="ja-JP")
-        translated_chunks = [str(translator.translate(chunk)) for chunk in chunks]
+        translated_chunks = [
+            html.unescape(str(translator.translate(chunk))) for chunk in chunks
+        ]
         return "\n".join(translated_chunks)
 
 
