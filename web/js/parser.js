@@ -37,9 +37,6 @@ function createLabelElement(element) {
     return label;
 }
 
-// input要素内のクリック/ドロップX座標を文字オフセットに変換する
-// （contentEditableのRange APIが使えないネイティブ<input>向けに、
-//  同じフォントでcanvasに描いて文字幅を測ることで近似する）
 let measureCtx = null;
 function getTextOffsetAtX(inputEl, clientX) {
     measureCtx ??= document.createElement("canvas").getContext("2d");
@@ -59,9 +56,6 @@ function getTextOffsetAtX(inputEl, clientX) {
     return text.length;
 }
 
-// テキストと埋め込みチップ(.function-chip)が交互に並ぶ入力欄。
-// 各テキスト片はネイティブ<input>なので、キャレット移動や改行禁止は
-// ブラウザ標準の挙動に任せられる。チップをまたぐ移動/削除だけを自前で扱う
 function createTextInputElement(element) {
     const container = document.createElement("div");
     container.className = "input-text-container";
@@ -74,7 +68,6 @@ function createTextInputElement(element) {
         input.setSelectionRange(pos, pos);
     };
 
-    // prevとnextの間のchipを消して1つのinputに統合する
     const mergeAcrossChip = (prevInput, chip, nextInput) => {
         const mergedPos = prevInput.value.length;
         prevInput.value += nextInput.value;
@@ -137,7 +130,6 @@ function createTextInputElement(element) {
         if (!container.contains(e.relatedTarget)) notify("blur");
     });
 
-    // シグネチャ取得後に呼ばれる。指定segmentのoffset位置でテキストを分割し、間にチップを挟む
     container.insertChip = (chipElement, segment, offset) => {
         const segments = getSegments();
         const target = (segment && container.contains(segment)) ? segment : segments[segments.length - 1];
@@ -157,9 +149,6 @@ function createTextInputElement(element) {
         container.dataset.system = element.system;
     }
 
-    // チップのラベル等（そのチップ自身の入力欄ではない部分）へのドロップは無視する。
-    // チップ自身の入力欄はそちらのdropハンドラがstopPropagationするため、
-    // ここに伝播してくる時点で非対話部分へのドロップだと分かる
     const isDropOnChipDecoration = (e) => {
         const chip = e.target.closest?.(".function-chip");
         return !!chip && container.contains(chip);
@@ -179,6 +168,14 @@ function createTextInputElement(element) {
         const candidates = sameRow.length ? sameRow : segments;
         return candidates.reduce((closest, el) => distanceToX(el, x) < distanceToX(closest, x) ? el : closest);
     };
+
+    container.addEventListener("mousedown", (e) => {
+        if (e.target.classList.contains("segment-input") || isDropOnChipDecoration(e)) return;
+        const target = findNearestSegment(e.clientX, e.clientY);
+        if (!target) return;
+        e.preventDefault();
+        focusSegment(target, getTextOffsetAtX(target, e.clientX));
+    });
 
     container.addEventListener("dragover", (e) => {
         if (isDropOnChipDecoration(e)) return;
