@@ -3,9 +3,9 @@ import importlib
 import importlib.util
 import inspect
 import builtins
-import html
 from typing import Optional
-from deep_translator import MyMemoryTranslator
+import argostranslate.package
+import argostranslate.translate
 
 
 class Api:
@@ -227,29 +227,13 @@ class Api:
 
     def _translate_to_japanese(self, text: str) -> str:
         """
-        MyMemoryTranslator(deep-translator)は1リクエストあたり500文字までの
-        制限があるため、テキストを行単位のチャンクに分けてから日本語に翻訳して結合する。
+        argostranslate(ローカルのニューラル機械翻訳)を使い、外部サービスに
+        依存せず日本語に翻訳する。行単位で翻訳して結合する。
         """
-        max_chunk_size = 480
-
+        translation = argostranslate.translate.get_translation_from_codes("en", "ja")
         lines = text.splitlines()
-        chunks = []
-        current = ""
-        for line in lines:
-            candidate = f"{current}\n{line}" if current else line
-            if len(candidate) > max_chunk_size and current:
-                chunks.append(current)
-                current = line
-            else:
-                current = candidate
-        if current:
-            chunks.append(current)
-
-        translator = MyMemoryTranslator(source="en-US", target="ja-JP")
-        translated_chunks = [
-            html.unescape(str(translator.translate(chunk))) for chunk in chunks
-        ]
-        return "\n".join(translated_chunks)
+        translated_lines = [translation.translate(line) if line else "" for line in lines]
+        return "\n".join(translated_lines)
 
 
 if __name__ == "__main__":
