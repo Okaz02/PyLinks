@@ -8,6 +8,8 @@ const spinTemplate = document.getElementById("spin-template");
 const blockTemplate = document.getElementById("block-template");
 const controlBlockTemplate = document.getElementById("control-block-template");
 
+const blocksBox = document.getElementById("blocks-box");
+
 const toolsBox = document.getElementById("tools-box");
 const toolsBoxInput = document.getElementById("tools-box-input");
 const toolsBoxBody = document.getElementById("tools-box-body");
@@ -51,7 +53,7 @@ function createFunctionBlockData(moduleName, functionName, params = []) {
 // トップレベルのブロックのうち、指定Y座標より下にある最初の要素を返す
 // （ドロップした高さに応じて、縦積みの並びの中の適切な位置に挿入するため）
 function getTopLevelBlockBelow(y) {
-    const topLevelBlocks = Array.from(document.body.children).filter(el =>
+    const topLevelBlocks = Array.from(blocksBox.children).filter(el =>
         el.classList.contains("block") || el.classList.contains("control-block")
     );
     return topLevelBlocks.find(el => el.getBoundingClientRect().top > y) || null;
@@ -68,7 +70,7 @@ async function addFunctionBlock(moduleName, functionName, dropY) {
 
     if (created) {
         const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
-        document.body.insertBefore(created, ref);
+        blocksBox.insertBefore(created, ref);
     }
 }
 
@@ -148,16 +150,16 @@ document.addEventListener("keydown", (e) => {
     selectedBlock = null;
 });
 
-// body の何もない場所だけをドロップターゲット化する
+// blocks-box の何もない場所だけをドロップターゲット化する
 // （他のブロックやツールボックスの上にドロップしても新規ブロックを作らない）
-document.body.addEventListener("dragover", (e) => {
-    if (e.target !== document.body) return;
+blocksBox.addEventListener("dragover", (e) => {
+    if (e.target !== blocksBox) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
 });
 
-document.body.addEventListener("drop", (e) => {
-    if (e.target !== document.body) return;
+blocksBox.addEventListener("drop", (e) => {
+    if (e.target !== blocksBox) return;
     e.preventDefault();
     const data = e.dataTransfer.getData("application/json");
     if (data) {
@@ -248,16 +250,14 @@ blocksData.blocks.forEach(element => {
         : createBlock(element);
 
     if (created) {
-        document.body.prepend(created);
+        blocksBox.prepend(created);
     }
 });
 
 document.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    const x = event.clientX;
-    const y = event.clientY;
-    toolsBox.style.top = `${y}px`;
-    toolsBox.style.left = `${x}px`;
+    toolsBox.style.top = `${event.clientY}px`;
+    toolsBox.style.left = `${event.clientX}px`;
 });
 
 toolsBoxInput.addEventListener("input", async () => {
