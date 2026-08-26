@@ -442,17 +442,30 @@ body {
     background-color: rgb(70, 70, 70);
 }
 
-/* ドロップダウンの中身をposition:absoluteで浮かせて、開閉でボタン自体の
-   サイズやタブバーの並びが変わらないようにする */
-.tab-btn>*:not(summary) {
+/* ドロップダウンの中身は1つの箱(.tab-menu)だけをposition:absoluteで浮かせ、
+   開閉でボタン自体のサイズやタブバーの並びが変わらないようにする。
+   中の項目はこの箱の中で普通に縦積みにする */
+.tab-menu {
     position: absolute;
     top: 100%;
     left: 0;
     min-width: 160px;
-    margin: 0;
+    display: flex;
+    flex-direction: column;
     padding: 5px 0;
     background-color: rgb(53, 53, 53);
     border: 1px solid rgb(70, 70, 70);
     border-radius: 0 0 5px 5px;
     color: white;
+}
+
+.tab-menu p {
+    margin: 0;
+    padding: 5px 15px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.tab-menu p:hover {
+    background-color: rgb(70, 70, 70);
 }
