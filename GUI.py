@@ -4,17 +4,7 @@ import importlib.util
 import inspect
 import builtins
 from typing import Optional
-import requests
-from bs4 import BeautifulSoup
-
-# Google翻訳(モバイル版)はUser-Agentが無いリクエストをボットとみなし拒否するため、
-# ブラウザを偽装するヘッダーを付与する。
-_TRANSLATE_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-    )
-}
+from deep_translator import MyMemoryTranslator
 
 
 class Api:
@@ -236,10 +226,10 @@ class Api:
 
     def _translate_to_japanese(self, text: str) -> str:
         """
-        Google翻訳(モバイル版エンドポイント)の1回あたりの文字数制限を考慮し、
-        テキストを行単位のチャンクに分けてから日本語に翻訳して結合する。
+        MyMemoryTranslator(deep-translator)は1リクエストあたり500文字までの
+        制限があるため、テキストを行単位のチャンクに分けてから日本語に翻訳して結合する。
         """
-        max_chunk_size = 4500
+        max_chunk_size = 480
 
         lines = text.splitlines()
         chunks = []
@@ -254,24 +244,9 @@ class Api:
         if current:
             chunks.append(current)
 
-        translated_chunks = [self._translate_chunk(chunk) for chunk in chunks]
+        translator = MyMemoryTranslator(source="en-US", target="ja-JP")
+        translated_chunks = [str(translator.translate(chunk)) for chunk in chunks]
         return "\n".join(translated_chunks)
-
-    def _translate_chunk(self, text: str) -> str:
-        response = requests.get(
-            "https://translate.google.com/m",
-            params={"sl": "en", "tl": "ja", "q": text},
-            headers=_TRANSLATE_HEADERS,
-            timeout=10,
-        )
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        element = soup.find("div", {"class": "result-container"})
-        if element is None:
-            raise RuntimeError("Could not parse translation result")
-
-        return element.get_text(strip=True)
 
 
 if __name__ == "__main__":
