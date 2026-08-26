@@ -110,15 +110,18 @@ function deselectBlock() {
 async function searchdocument(block) {
     if (!pywebviewReady) return;
     const spinFragment = spinTemplate.content.cloneNode(true);
-    spinFragment.classList.add("")
+    const spin = spinFragment.querySelector(".spinner");
+
+    spin.classList.add("document-spinner");
     documentBox.textContent = "";
     documentBox.appendChild(spinFragment);
+
     const result = await pywebview.api.get_translated_doc(block.getModuleName, block.getFuncName);
+
     documentBox.textContent = result.error ? result.error : result.doc;
 }
 
 document.body.addEventListener("click", (e) => {
-    // 入力欄やボタンの操作中はブロックの選択状態を触らない（フォーカス・編集を優先する）
     if (e.target.closest?.('input, textarea, button')) {
         return;
     }

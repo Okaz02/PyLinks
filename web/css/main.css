@@ -379,3 +379,8 @@ body {
     white-space: pre-wrap;
     overflow-y: auto;
 }
+
+.document-spinner {
+    width: 35px;
+    height: 35px;
+}
