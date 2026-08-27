@@ -5,7 +5,6 @@ export const blocksData = {
             "name": "import",
             "block_module": "builtins",
             "block_label": "__import__",
-            "block_tag": "import",
             "block_color": "#25d45a",
             "block_slide": [
                 {
@@ -54,10 +53,9 @@ export const blocksData = {
         },
         {
             "type": "block",
-            "name": "assign",
+            "name": "=",
             "block_module": "",
-            "block_label": "",
-            "block_tag": "=",
+            "block_label": "=",
             "block_color": "#caaa40",
             "block_slide": [
                 {
@@ -72,15 +70,38 @@ export const blocksData = {
                 {
                     "type": "input",
                     "input_type": "text"
+                }
+            ],
+            "block_back": []
+        },
+        {
+            "type": "control",
+            "name": "for",
+            "block_module": "",
+            "block_label": "for",
+            "block_color": "#eeeb3c",
+            "block_slide": [
+                {
+                    "type": "label",
+                    "text": "for"
                 },
                 {
                     "type": "input",
-                    "input_type": "block",
-                    "system": "add-block"
+                    "input_type": "text",
+                    "placeholder": "variable name"
+                },
+                {
+                    "type": "label",
+                    "text": "in"
                 },
                 {
                     "type": "input",
-                    "input_type": "text"
+                    "input_type": "text",
+                    "placeholder": "list"
+                },
+                {
+                    "type": "label",
+                    "text": ":"
                 }
             ],
             "block_back": []

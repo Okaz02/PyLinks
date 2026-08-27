@@ -52,7 +52,7 @@ function importBlockToCode(block) {
 }
 
 function blockToCode(block) {
-    if (block.getTag === "import") return importBlockToCode(block);
+    if (block.getModuleName === "builtins" && block.getFuncName === "__import__") return importBlockToCode(block);
     return slideToCode(block.querySelector(":scope > .block-slide"));
 }
 
@@ -60,7 +60,7 @@ function blockToCode(block) {
 // control-block-body-content内の子ブロックを1段深くインデントして並べる
 function controlBlockToCode(control, depth) {
     const header = control.querySelector(":scope > .control-block-header > .control-block-header-content");
-    const headLine = `${indent(depth)}${slideToCode(header)}:`;
+    const headLine = `${indent(depth)}${slideToCode(header)}`;
 
     const bodyContent = control.querySelector(":scope > .control-block-body > .control-block-body-content");
     const bodyBlocks = bodyContent

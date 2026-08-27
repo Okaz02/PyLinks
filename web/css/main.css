@@ -40,6 +40,8 @@ body {
 }
 
 #blocks-box {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     min-width: 0;
     overflow: auto;
@@ -48,6 +50,7 @@ body {
 .block {
     width: max-content;
     min-height: 40px;
+    flex-shrink: 0;
     color: white;
     border-radius: 10px;
     border: 3px solid rgb(70, 70, 70);
@@ -244,6 +247,7 @@ body {
     position: relative;
     width: max-content;
     min-width: 180px;
+    flex-shrink: 0;
     color: white;
     border-radius: 10px;
     border: 3px solid rgb(70, 70, 70);
@@ -259,10 +263,11 @@ body {
 }
 
 .control-block-header {
-    height: 40px;
     display: flex;
     align-items: center;
     gap: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
     padding-left: 20px;
     padding-right: 10px;
 }
@@ -280,7 +285,7 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    height: 100%;
+    min-height: 100%;
     width: 100%;
     overflow-x: auto;
 }
@@ -298,8 +303,7 @@ body {
 
 .control-block-body-content {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
     padding: 8px 10px;
     min-width: 150px;
 }
