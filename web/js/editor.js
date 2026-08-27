@@ -16,40 +16,6 @@ const toolsBoxBody = document.getElementById("tools-box-body");
 
 const documentBox = document.getElementById("document-box");
 
-function createFunctionBlockData(moduleName, functionName, params = []) {
-    let labelName = "";
-    if (moduleName === "builtins") {
-        labelName = `${functionName}(`
-    } else {
-        labelName = `${moduleName}.${functionName}(`;
-    }
-    const blockSlide = [
-        { type: "label", text: labelName }
-    ];
-
-    params.forEach((param, index) => {
-        if (index > 0) {
-            blockSlide.push({ type: "label", text: "," });
-        }
-        blockSlide.push({
-            type: "input",
-            input_type: "text"
-        });
-    });
-
-    blockSlide.push({ type: "label", text: `)` })
-
-    return {
-        type: "block",
-        block_module: moduleName,
-        block_label: functionName,
-        block_tag: "function_call",
-        block_color: "#3498db",
-        block_slide: blockSlide,
-        block_back: []
-    };
-}
-
 // トップレベルのブロックのうち、指定Y座標より下にある最初の要素を返す
 // （ドロップした高さに応じて、縦積みの並びの中の適切な位置に挿入するため）
 function getTopLevelBlockBelow(y) {
@@ -60,13 +26,11 @@ function getTopLevelBlockBelow(y) {
 }
 
 async function addFunctionBlock(moduleName, functionName, dropY) {
-    // シグネチャ情報を取得
     if (!pywebviewReady) return;
-    const sig = await pywebview.api.get_function_signature(moduleName, functionName);
-    const params = sig.params || [];
+    const { block, error } = await pywebview.api.get_function_block(moduleName, functionName);
+    if (error || !block) return;
 
-    const blockData = createFunctionBlockData(moduleName, functionName, params);
-    const created = createBlock(blockData);
+    const created = createBlock(block);
 
     if (created) {
         const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
@@ -75,13 +39,11 @@ async function addFunctionBlock(moduleName, functionName, dropY) {
 }
 
 async function addFunctionBlockToInput(moduleName, functionName, container, segment, offset) {
-    // シグネチャ情報を取得
     if (!pywebviewReady) return;
-    const sig = await pywebview.api.get_function_signature(moduleName, functionName);
-    const params = sig.params || [];
+    const { block, error } = await pywebview.api.get_function_block(moduleName, functionName);
+    if (error || !block) return;
 
-    const blockData = createFunctionBlockData(moduleName, functionName, params);
-    const created = createBlock(blockData);
+    const created = createBlock(block);
 
     if (created) {
         const blockElement = created.querySelector?.(".block") || created;
