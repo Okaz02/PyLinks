@@ -68,12 +68,22 @@ function createTextInputElement(element) {
         input.setSelectionRange(pos, pos);
     };
 
+    // チップが1つでも入っている間はplaceholderを隠す。
+    // チップが1つも残らなくなったら(必ずsegmentは1つに戻るので)元に戻す
+    const originalPlaceholder = element.placeholder ?? "";
+    const syncPlaceholder = () => {
+        const hasChip = Array.from(container.children).some(el => el.classList.contains("function-chip"));
+        const placeholder = hasChip ? "" : originalPlaceholder;
+        getSegments().forEach(input => { input.placeholder = placeholder; });
+    };
+
     const mergeAcrossChip = (prevInput, chip, nextInput) => {
         const mergedPos = prevInput.value.length;
         prevInput.value += nextInput.value;
         chip.remove();
         nextInput.remove();
         focusSegment(prevInput, mergedPos);
+        syncPlaceholder();
         notify("input");
     };
 
@@ -112,17 +122,18 @@ function createTextInputElement(element) {
         }
     };
 
-    const createSegment = (value = "") => {
+    const createSegment = (value = "", placeholder) => {
         const input = document.createElement("input");
         input.type = "text";
         input.className = "segment-input";
         input.value = value;
+        if (placeholder) input.placeholder = placeholder;
         input.addEventListener("input", () => notify("input"));
         input.addEventListener("keydown", (e) => handleSegmentKeydown(e, input));
         return input;
     };
 
-    container.appendChild(createSegment());
+    container.appendChild(createSegment("", element.placeholder));
 
     container.getValue = () => ({ kind: "text", value: getSegments().map(input => input.value).join("") });
     container.onChangeValue = (callback) => { listeners.push(callback); };
@@ -142,6 +153,7 @@ function createTextInputElement(element) {
             target.value = target.value.slice(0, pos);
             target.after(chipElement, tail);
         }
+        syncPlaceholder();
         notify("input");
     };
 
