@@ -37,9 +37,6 @@ function createLabelElement(element) {
     return label;
 }
 
-// input要素内のクリック/ドロップX座標を文字オフセットに変換する
-// （contentEditableのRange APIが使えないネイティブ<input>向けに、
-//  同じフォントでcanvasに描いて文字幅を測ることで近似する）
 let measureCtx = null;
 function getTextOffsetAtX(inputEl, clientX) {
     measureCtx ??= document.createElement("canvas").getContext("2d");
@@ -59,9 +56,6 @@ function getTextOffsetAtX(inputEl, clientX) {
     return text.length;
 }
 
-// テキストと埋め込みチップ(.function-chip)が交互に並ぶ入力欄。
-// 各テキスト片はネイティブ<input>なので、キャレット移動や改行禁止は
-// ブラウザ標準の挙動に任せられる。チップをまたぐ移動/削除だけを自前で扱う
 function createTextInputElement(element) {
     const container = document.createElement("div");
     container.className = "input-text-container";
@@ -74,13 +68,24 @@ function createTextInputElement(element) {
         input.setSelectionRange(pos, pos);
     };
 
-    // prevとnextの間のchipを消して1つのinputに統合する
+    // チップが1つでも入っている間はplaceholderを隠す。
+    // チップが1つも残らなくなったら(必ずsegmentは1つに戻るので)元に戻す
+    const originalPlaceholder = element.placeholder ?? "";
+    const syncPlaceholder = () => {
+        const hasChip = Array.from(container.children).some(el => el.classList.contains("function-chip"));
+        const placeholder = hasChip ? "" : originalPlaceholder;
+        getSegments().forEach(input => { input.placeholder = placeholder; });
+    };
+
     const mergeAcrossChip = (prevInput, chip, nextInput) => {
         const mergedPos = prevInput.value.length;
+        const oldValue = prevInput.value;
         prevInput.value += nextInput.value;
+        window.recordValueChange?.(prevInput, oldValue, prevInput.value);
         chip.remove();
         nextInput.remove();
         focusSegment(prevInput, mergedPos);
+        syncPlaceholder();
         notify("input");
     };
 
@@ -119,17 +124,18 @@ function createTextInputElement(element) {
         }
     };
 
-    const createSegment = (value = "") => {
+    const createSegment = (value = "", placeholder) => {
         const input = document.createElement("input");
         input.type = "text";
         input.className = "segment-input";
         input.value = value;
+        if (placeholder) input.placeholder = placeholder;
         input.addEventListener("input", () => notify("input"));
         input.addEventListener("keydown", (e) => handleSegmentKeydown(e, input));
         return input;
     };
 
-    container.appendChild(createSegment());
+    container.appendChild(createSegment(element.value ?? "", element.placeholder));
 
     container.getValue = () => ({ kind: "text", value: getSegments().map(input => input.value).join("") });
     container.onChangeValue = (callback) => { listeners.push(callback); };
@@ -137,7 +143,6 @@ function createTextInputElement(element) {
         if (!container.contains(e.relatedTarget)) notify("blur");
     });
 
-    // シグネチャ取得後に呼ばれる。指定segmentのoffset位置でテキストを分割し、間にチップを挟む
     container.insertChip = (chipElement, segment, offset) => {
         const segments = getSegments();
         const target = (segment && container.contains(segment)) ? segment : segments[segments.length - 1];
@@ -150,6 +155,7 @@ function createTextInputElement(element) {
             target.value = target.value.slice(0, pos);
             target.after(chipElement, tail);
         }
+        syncPlaceholder();
         notify("input");
     };
 
@@ -157,9 +163,6 @@ function createTextInputElement(element) {
         container.dataset.system = element.system;
     }
 
-    // チップのラベル等（そのチップ自身の入力欄ではない部分）へのドロップは無視する。
-    // チップ自身の入力欄はそちらのdropハンドラがstopPropagationするため、
-    // ここに伝播してくる時点で非対話部分へのドロップだと分かる
     const isDropOnChipDecoration = (e) => {
         const chip = e.target.closest?.(".function-chip");
         return !!chip && container.contains(chip);
@@ -180,6 +183,14 @@ function createTextInputElement(element) {
         return candidates.reduce((closest, el) => distanceToX(el, x) < distanceToX(closest, x) ? el : closest);
     };
 
+    container.addEventListener("mousedown", (e) => {
+        if (e.target.classList.contains("segment-input") || isDropOnChipDecoration(e)) return;
+        const target = findNearestSegment(e.clientX, e.clientY);
+        if (!target) return;
+        e.preventDefault();
+        focusSegment(target, getTextOffsetAtX(target, e.clientX));
+    });
+
     container.addEventListener("dragover", (e) => {
         if (isDropOnChipDecoration(e)) return;
         e.preventDefault();
@@ -197,11 +208,16 @@ function createTextInputElement(element) {
 
         const data = e.dataTransfer.getData("application/json");
         if (!data) return;
-        const { moduleName, functionName } = JSON.parse(data);
+        const parsed = JSON.parse(data);
 
         const target = e.target.classList?.contains("segment-input") ? e.target : findNearestSegment(e.clientX, e.clientY);
         const offset = target ? getTextOffsetAtX(target, e.clientX) : 0;
-        window.addFunctionBlockToInput(moduleName, functionName, container, target, offset);
+
+        if (parsed.kind === "block") {
+            window.addStaticBlockToInput(parsed.blockData, container, target, offset);
+        } else {
+            window.addFunctionBlockToInput(parsed.moduleName, parsed.functionName, container, target, offset);
+        }
     });
 
     return container;

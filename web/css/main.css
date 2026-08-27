@@ -16,9 +16,33 @@
     font-family: "Regular EN Font", "Regular JP Font", sans-serif;
 }
 
+html {
+    height: 100%;
+}
+
 body {
-    position: relative;
+    display: flex;
+    flex-direction: column;
     background-color: black;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+#workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+#blocks-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
 }
 
 .block {
@@ -41,6 +65,7 @@ body {
     width: 10px;
     flex-shrink: 0;
     align-self: stretch;
+    cursor: grab;
 }
 
 .block-label {
@@ -98,7 +123,7 @@ body {
     flex-shrink: 0;
     right: 0;
     top: 0;
-    transform: translate(50%, -50%);
+    transform: translate(50%, 0);
     background-color: rgb(32, 32, 32) !important;
     border-radius: 100%;
 }
@@ -124,7 +149,7 @@ body {
 
 .input-text-container {
     display: inline-flex;
-    flex-wrap: wrap;
+    white-space: nowrap;
     align-items: center;
     border: 1px solid #ccc;
     border-radius: 10px;
@@ -132,9 +157,9 @@ body {
     background-color: #fff;
     color: #222;
     min-height: 20px;
-    min-width: 35px;
     width: fit-content;
     outline: none;
+    cursor: text;
 }
 
 .input-text-container.dragover {
@@ -149,13 +174,45 @@ body {
     color: inherit;
     padding: 0;
     margin: 0;
-    min-width: 4px;
     field-sizing: content;
 }
 
 .function-chip {
     margin: 0 4px;
     user-select: none;
+}
+
+.spinner {
+    animation: rotate 2s linear infinite;
+}
+
+.spinner-path {
+    stroke: #71b3df;
+    stroke-linecap: round;
+    animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes dash {
+    0% {
+        stroke-dasharray: 1, 150;
+        stroke-dashoffset: 0;
+    }
+
+    50% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -35;
+    }
+
+    100% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -124;
+    }
 }
 
 .btn-add {
@@ -216,6 +273,7 @@ body {
     top: 0;
     bottom: 0;
     width: 10px;
+    cursor: grab;
 }
 
 .control-block-header-content {
@@ -276,6 +334,8 @@ body {
 
 #tools-box {
     position: fixed;
+    top: 0;
+    left: 0;
     width: 300px;
     height: 500px;
     box-sizing: border-box;
@@ -288,6 +348,8 @@ body {
 }
 
 #tools-box-body {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -326,4 +388,86 @@ body {
 
 .tools-box-group {
     color: white;
+}
+
+#document-box {
+    flex: 0 0 40vw;
+    width: 40vw;
+    box-sizing: border-box;
+    padding: 20px;
+    border-radius: 10px;
+    border: 3px solid rgb(70, 70, 70);
+    background-color: rgb(53, 53, 53);
+    color: white;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    display: flex;
+}
+
+.document-spinner {
+    width: 35px;
+    height: 35px;
+    margin: auto;
+}
+
+#tab {
+    position: relative;
+    z-index: 20;
+    flex: 0 0 auto;
+    height: 25px;
+    display: flex;
+    background-color: rgb(53, 53, 53);
+}
+
+.tab-btn {
+    position: relative;
+}
+
+.tab-btn summary {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 10px;
+    color: white;
+    font-size: small;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.tab-btn summary::-webkit-details-marker {
+    display: none;
+}
+
+.tab-btn summary:hover,
+.tab-btn[open] summary {
+    background-color: rgb(70, 70, 70);
+}
+
+/* ドロップダウンの中身は1つの箱(.tab-menu)だけをposition:absoluteで浮かせ、
+   開閉でボタン自体のサイズやタブバーの並びが変わらないようにする。
+   中の項目はこの箱の中で普通に縦積みにする */
+.tab-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    padding: 5px 0;
+    background-color: rgb(53, 53, 53);
+    border: 1px solid rgb(70, 70, 70);
+    border-radius: 0 0 5px 5px;
+    color: white;
+}
+
+.tab-menu p {
+    margin: 0;
+    padding: 5px 15px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.tab-menu p:hover {
+    background-color: rgb(70, 70, 70);
 }

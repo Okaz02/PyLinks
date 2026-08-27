@@ -5,20 +5,57 @@
     <meta charset="UTF-8">
     <link rel="stylesheet" href="./css/main.css">
     <script type="module" src="./js/editor.js"></script>
+    <script type="module" src="./js/codegen.js"></script>
+    <script type="module" src="./js/history.js"></script>
 </head>
 
 <body>
-
-    <div id="tools-box">
-        <div id="tools-box-header">
-            <input class="input-field" id="tools-box-input" type="text">
+    <div id="tab">
+        <details class="tab-btn">
+            <summary>
+                File
+            </summary>
+            <div class="tab-menu">
+                <p>Open folder</p>
+                <p id="menu-open-file">Open file</p>
+                <p>New python file</p>
+                <p id="menu-export">Export</p>
+            </div>
+        </details>
+        <details class="tab-btn">
+            <summary>
+                Edit
+            </summary>
+            <div class="tab-menu">
+                <p id="menu-undo">Undo</p>
+                <p id="menu-redo">Redo</p>
+                <p>Copy</p>
+                <p>Paste</p>
+            </div>
+        </details>
+    </div>
+    <div id="workspace">
+        <div id="blocks-box">
+            <div id="tools-box">
+                <div id="tools-box-header">
+                    <input class="input-field" id="tools-box-input" type="text">
+                </div>
+                <div id="tools-box-body">
+                </div>
+            </div>
         </div>
-        <div id="tools-box-body">
+        <div id="document-box">
         </div>
     </div>
 </body>
 
 </html>
+
+<template id="spin-template">
+    <svg class="spinner" viewBox="0 0 50 50">
+        <circle class="spinner-path" cx="25" cy="25" r="20" fill="none" stroke-width="5" />
+    </svg>
+</template>
 
 <template id="add-block-btn-template">
     <button class="add-block-btn">

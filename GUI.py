@@ -1,9 +1,12 @@
+import ast
 import webview
 import importlib
 import importlib.util
 import inspect
 import builtins
-from typing import Optional
+from typing import Callable, Optional
+import argostranslate.package
+import argostranslate.translate
 
 
 class Api:
@@ -146,13 +149,15 @@ class Api:
             for func_name in func_names
         ]
 
-    def get_function_signature(self, module_name: str, func_name: str) -> dict:
+    def _resolve_function(
+        self, module_name: str, func_name: str
+    ) -> tuple[Optional[Callable], Optional[str]]:
         """
-        指定した関数のシグネチャ情報を取得する。
-        引数情報を {名前: デフォルト値} の形式で返す。
+        module_name/func_name から呼び出し可能オブジェクトを解決する。
+        (関数, エラー文言) のタプルを返す。解決できなければ関数側はNone。
         """
         if not self.check_module_exists(module_name):
-            return {"params": [], "error": f"Module {module_name} not found"}
+            return None, f"Module {module_name} not found"
 
         try:
             if module_name == "builtins" or (
@@ -163,32 +168,285 @@ class Api:
             else:
                 module = importlib.import_module(module_name)
         except Exception as e:
-            return {"params": [], "error": str(e)}
+            return None, str(e)
 
         func = getattr(module, func_name, None)
         if not callable(func):
-            return {"params": [], "error": f"{func_name} is not callable"}
+            return None, f"{func_name} is not callable"
+
+        return func, None
+
+    def get_function_block(self, module_name: str, func_name: str) -> dict:
+        """
+        指定した関数を、web/block/blocks.js と同じスキーマのブロックJSONに変換する。
+        ブロックの見た目(ラベル/入力欄の並び)はここで組み立て、
+        フロントエンドはそれをそのままcreateBlockに渡すだけにする。
+        """
+        func, error = self._resolve_function(module_name, func_name)
+        if error or func is None:
+            return {"block": None, "error": error}
 
         try:
             sig = inspect.signature(func)
-            params = []
-            for param_name, param in sig.parameters.items():
-                if param_name in ("self", "cls"):
-                    continue
-                params.append(
-                    {
-                        "name": param_name,
-                        "default": (
-                            str(param.default)
-                            if param.default != inspect.Parameter.empty
-                            else None
-                        ),
-                        "kind": str(param.kind),
-                    }
-                )
-            return {"params": params, "error": None}
+            param_names = [
+                name for name in sig.parameters if name not in ("self", "cls")
+            ]
         except (ValueError, TypeError):
-            return {"params": [], "error": "Could not get signature"}
+            param_names = []
+
+        return {
+            "block": self._build_call_block(module_name, func_name, param_names),
+            "error": None,
+        }
+
+    def _build_call_block(
+        self,
+        module_name: str,
+        func_name: str,
+        param_names: list[str],
+        arg_sources: Optional[list[str]] = None,
+    ) -> dict:
+        """
+        関数呼び出しブロックのJSONを組み立てる。
+        arg_sources を渡すと、対応する引数欄に初期値として埋め込む
+        (.pyファイル読み込み時に、実際に渡されていた引数の式をそのまま復元するため)
+        """
+        arg_sources = arg_sources or []
+        label = (
+            f"{func_name}("
+            if module_name == "builtins"
+            else f"{module_name}.{func_name}("
+        )
+
+        block_slide = [{"type": "label", "text": label}]
+        for index in range(max(len(param_names), len(arg_sources))):
+            if index > 0:
+                block_slide.append({"type": "label", "text": ","})
+            item = {"type": "input", "input_type": "text"}
+            if index < len(param_names):
+                item["placeholder"] = param_names[index]
+            if index < len(arg_sources):
+                item["value"] = arg_sources[index]
+            block_slide.append(item)
+        block_slide.append({"type": "label", "text": ")"})
+
+        return {
+            "type": "block",
+            "block_module": module_name,
+            "block_label": func_name,
+            "block_tag": "function_call",
+            "block_color": "#3498db",
+            "block_slide": block_slide,
+            "block_back": [],
+        }
+
+    def _build_import_block(self, module_name: str) -> dict:
+        return {
+            "type": "block",
+            "name": "import",
+            "block_module": "builtins",
+            "block_label": "__import__",
+            "block_tag": "import",
+            "block_color": "#25d45a",
+            "block_slide": [
+                {"type": "label", "text": "import"},
+                {
+                    "type": "checked",
+                    "check": "import_module",
+                    "when": "blur",
+                    "warp": {
+                        "type": "input",
+                        "input_type": "text",
+                        "system": "import_module",
+                        "value": module_name,
+                    },
+                    "on_success": [],
+                    "on_fail": [{"type": "label", "text": "⚠️"}],
+                },
+            ],
+            "block_back": [],
+        }
+
+    def _build_assign_block(self, target_name: str, value_source: str) -> dict:
+        return {
+            "type": "block",
+            "name": "assign",
+            "block_module": "",
+            "block_label": "",
+            "block_tag": "=",
+            "block_color": "#caaa40",
+            "block_slide": [
+                {
+                    "type": "input",
+                    "input_type": "text",
+                    "placeholder": "variable name",
+                    "value": target_name,
+                },
+                {"type": "label", "text": "="},
+                {"type": "input", "input_type": "text", "value": value_source},
+                {"type": "input", "input_type": "block", "system": "add-block"},
+                {"type": "input", "input_type": "text"},
+            ],
+            "block_back": [],
+        }
+
+    def _resolve_call_name(self, func_node) -> Optional[tuple[str, str]]:
+        """
+        Call式のfunc部分から (module_name, func_name) を判定する。
+        `print(...)` のような単純名は builtins、`os.listdir(...)` のような
+        `モジュール.関数` の形だけをサポートする。それ以外(メソッドチェーン等)はNone。
+        """
+        if isinstance(func_node, ast.Name):
+            return "builtins", func_node.id
+        if isinstance(func_node, ast.Attribute) and isinstance(func_node.value, ast.Name):
+            return func_node.value.id, func_node.attr
+        return None
+
+    def _call_to_block(self, call_node: ast.Call) -> Optional[dict]:
+        resolved = self._resolve_call_name(call_node.func)
+        if resolved is None:
+            return None
+        module_name, func_name = resolved
+
+        func, error = self._resolve_function(module_name, func_name)
+        param_names: list[str] = []
+        if not error and func is not None:
+            try:
+                sig = inspect.signature(func)
+                param_names = [
+                    name for name in sig.parameters if name not in ("self", "cls")
+                ]
+            except (ValueError, TypeError):
+                param_names = []
+
+        try:
+            arg_sources = [ast.unparse(arg) for arg in call_node.args]
+        except Exception:
+            return None
+
+        return self._build_call_block(module_name, func_name, param_names, arg_sources)
+
+    def _statement_to_blocks(self, node: ast.stmt) -> list[dict]:
+        """
+        トップレベルの文を、対応可能な範囲でブロックJSONのリストに変換する。
+        対応: import文、単純な変数への代入文、関数呼び出し文のみ。
+        それ以外(if/for/def/class 等)は空リストを返す(=読み込み時にスキップされる)。
+        """
+        if isinstance(node, ast.Import):
+            return [self._build_import_block(alias.name) for alias in node.names]
+
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            try:
+                value_source = ast.unparse(node.value)
+            except Exception:
+                return []
+            return [self._build_assign_block(node.targets[0].id, value_source)]
+
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            block = self._call_to_block(node.value)
+            return [block] if block else []
+
+        return []
+
+    def load_python_file(self, path: str) -> dict:
+        """
+        .pyファイルを読み込み、対応可能な範囲でブロックJSONのリストに変換する。
+        変換できなかった文の数を skipped で返す。
+        """
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+        except OSError as e:
+            return {"blocks": [], "skipped": 0, "error": str(e)}
+
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as e:
+            return {"blocks": [], "skipped": 0, "error": f"Syntax error: {e}"}
+
+        blocks: list[dict] = []
+        skipped = 0
+        for node in tree.body:
+            node_blocks = self._statement_to_blocks(node)
+            if node_blocks:
+                blocks.extend(node_blocks)
+            else:
+                skipped += 1
+
+        return {"blocks": blocks, "skipped": skipped, "error": None}
+
+    def load_python_file_dialog(self) -> dict:
+        """
+        ネイティブのファイル選択ダイアログで.pyファイルを選ばせ、
+        読み込んでブロックJSONのリストに変換する。
+        """
+        if self._window is None:
+            return {"blocks": [], "skipped": 0, "error": "Window not ready"}
+
+        paths = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            file_types=("Python files (*.py)", "All files (*.*)"),
+        )
+        if not paths:
+            return {"blocks": [], "skipped": 0, "error": None}
+
+        return self.load_python_file(paths[0])
+
+    def save_python_file_dialog(self, code: str) -> dict:
+        """
+        ネイティブの保存ダイアログでパスを選ばせ、渡されたPythonコードを書き出す。
+        """
+        if self._window is None:
+            return {"error": "Window not ready"}
+
+        paths = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename="untitled.py",
+            file_types=("Python files (*.py)", "All files (*.*)"),
+        )
+        if not paths:
+            return {"error": None}
+
+        try:
+            with open(paths[0], "w", encoding="utf-8") as f:
+                f.write(code)
+        except OSError as e:
+            return {"error": str(e)}
+
+        return {"error": None}
+
+    def get_translated_doc(self, module_name: str, func_name: str) -> dict:
+        """
+        指定した関数のドキュメント(docstring)を取得し、日本語に翻訳して返す。
+        """
+        func, error = self._resolve_function(module_name, func_name)
+        if error or func is None:
+            return {"doc": None, "error": error}
+
+        doc = inspect.getdoc(func)
+        if not doc:
+            return {"doc": None, "error": "No documentation available"}
+
+        try:
+            translated = self._translate_to_japanese(doc)
+        except Exception as e:
+            return {"doc": doc, "error": f"Translation failed: {e}"}
+
+        return {"doc": translated, "error": None}
+
+    def _translate_to_japanese(self, text: str) -> str:
+        """
+        argostranslate(ローカルのニューラル機械翻訳)を使い、外部サービスに
+        依存せず日本語に翻訳する。行単位で翻訳して結合する。
+        """
+        translation = argostranslate.translate.get_translation_from_codes("en", "ja")
+        lines = text.splitlines()
+        translated_lines = [translation.translate(line) if line else "" for line in lines]
+        return "\n".join(translated_lines)
 
 
 if __name__ == "__main__":

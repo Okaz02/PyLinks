@@ -2,7 +2,9 @@ export const blocksData = {
     "blocks": [
         {
             "type": "block",
-            "block_label": "import",
+            "name": "import",
+            "block_module": "builtins",
+            "block_label": "__import__",
             "block_tag": "import",
             "block_color": "#25d45a",
             "block_slide": [
@@ -52,13 +54,16 @@ export const blocksData = {
         },
         {
             "type": "block",
-            "block_label": "=",
+            "name": "assign",
+            "block_module": "",
+            "block_label": "",
             "block_tag": "=",
             "block_color": "#caaa40",
             "block_slide": [
                 {
                     "type": "input",
-                    "input_type": "text"
+                    "input_type": "text",
+                    "placeholder": "variable name"
                 },
                 {
                     "type": "label",
