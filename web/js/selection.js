@@ -1,4 +1,4 @@
-import { isTopLevelBlock } from './blocks-dom.js';
+import { isPlacedBlock } from './blocks-dom.js';
 
 // ブロック全体の選択(Shift+クリックで複数選択)とキーボード削除、
 // 選択中ブロックのドキュメント表示を扱う
@@ -74,7 +74,7 @@ document.body.addEventListener("click", (e) => {
 
     searchdocument(block);
 
-    if (!isTopLevelBlock(block)) {
+    if (!isPlacedBlock(block)) {
         // 埋め込みチップ等ネストしたブロックは複数選択の対象外。
         // ドキュメント表示のために単独選択の見た目だけ付ける
         selectOnly(block);

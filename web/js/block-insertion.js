@@ -1,5 +1,5 @@
 import { createBlock, createControlBlock, extractBlockData } from './block-factory.js';
-import { blocksBox, getTopLevelBlockBelow, isTopLevelBlock } from './blocks-dom.js';
+import { blocksBox, findBlockContainerAt, getBlockBelow, isPlacedBlock } from './blocks-dom.js';
 import { selectedBlocks, lastSelectedBlock, selectMany } from './selection.js';
 import { draggingBlocks } from './dnd.js';
 
@@ -9,7 +9,7 @@ import { draggingBlocks } from './dnd.js';
 let pywebviewReady = !!window.pywebview;
 window.addEventListener('pywebviewready', () => { pywebviewReady = true; }, { once: true });
 
-async function addFunctionBlock(moduleName, functionName, dropY) {
+async function addFunctionBlock(moduleName, functionName, container, dropY) {
     if (!pywebviewReady) return;
     const { block, error } = await pywebview.api.get_function_block(moduleName, functionName);
     if (error || !block) return;
@@ -17,8 +17,8 @@ async function addFunctionBlock(moduleName, functionName, dropY) {
     const created = createBlock(block);
 
     if (created) {
-        const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
-        blocksBox.insertBefore(created, ref);
+        const ref = typeof dropY === "number" ? getBlockBelow(container, dropY) : null;
+        container.insertBefore(created, ref);
     }
 }
 
@@ -38,12 +38,12 @@ async function addFunctionBlockToInput(moduleName, functionName, container, segm
 
 // blocks.jsで定義済みの定型ブロック(import, assignなど)を配置する
 // 関数呼び出しと違いシグネチャ取得が不要なので同期的に作れる
-function addStaticBlock(blockData, dropY) {
+function addStaticBlock(blockData, container, dropY) {
     const created = blockData.type === "control" ? createControlBlock(blockData) : createBlock(blockData);
 
     if (created) {
-        const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
-        blocksBox.insertBefore(created, ref);
+        const ref = typeof dropY === "number" ? getBlockBelow(container, dropY) : null;
+        container.insertBefore(created, ref);
     }
 }
 
@@ -61,28 +61,31 @@ function addStaticBlockToInput(blockData, container, segment, offset) {
 window.addFunctionBlockToInput = addFunctionBlockToInput;
 window.addStaticBlockToInput = addStaticBlockToInput;
 
-// ツールボックスからの新規ブロックドロップだけを受け付ける。
+// ツールボックスからの新規ブロックドロップだけを受け付ける。ドロップ先がコントロール
+// ブロックの本体の上ならそこに、それ以外はトップレベル(blocksBox)に配置する。
 // 既存ブロックの並び替えドラッグ中(draggingBlocksがある間)はdnd.js側が処理するので
 // ここでは何もしない
 blocksBox.addEventListener("dragover", (e) => {
     if (draggingBlocks) return;
-    if (e.target !== blocksBox) return;
+    const container = findBlockContainerAt(e.target);
+    if (e.target !== container) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
 });
 
 blocksBox.addEventListener("drop", (e) => {
     if (draggingBlocks) return;
-    if (e.target !== blocksBox) return;
+    const container = findBlockContainerAt(e.target);
+    if (e.target !== container) return;
     e.preventDefault();
     const data = e.dataTransfer.getData("application/json");
     if (!data) return;
 
     const parsed = JSON.parse(data);
     if (parsed.kind === "block") {
-        addStaticBlock(parsed.blockData, e.clientY);
+        addStaticBlock(parsed.blockData, container, e.clientY);
     } else {
-        addFunctionBlock(parsed.moduleName, parsed.functionName, e.clientY);
+        addFunctionBlock(parsed.moduleName, parsed.functionName, container, e.clientY);
     }
 });
 
@@ -92,9 +95,11 @@ let clipboard = [];
 function pasteClipboard() {
     if (clipboard.length === 0) return;
 
-    const ref = lastSelectedBlock && isTopLevelBlock(lastSelectedBlock)
-        ? lastSelectedBlock.nextSibling
-        : null;
+    // 最後に選択していたブロックの直後に貼り付ける。それがコントロールブロックの
+    // 本体の中にあれば、その本体の中に貼り付ける
+    const anchor = lastSelectedBlock && isPlacedBlock(lastSelectedBlock) ? lastSelectedBlock : null;
+    const container = anchor ? anchor.parentElement : blocksBox;
+    const ref = anchor ? anchor.nextSibling : null;
 
     const pastedBlocks = [];
     clipboard.forEach(data => {
@@ -103,7 +108,7 @@ function pasteClipboard() {
         if (!fragment) return;
 
         const el = fragment.firstElementChild;
-        blocksBox.insertBefore(fragment, ref);
+        container.insertBefore(fragment, ref);
         pastedBlocks.push(el);
     });
 
@@ -122,7 +127,7 @@ document.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (key === "c" && selectedBlocks.size > 0) {
         e.preventDefault();
-        const ordered = Array.from(blocksBox.children).filter(el => selectedBlocks.has(el));
+        const ordered = Array.from(blocksBox.querySelectorAll(".block, .control-block")).filter(el => selectedBlocks.has(el));
         clipboard = ordered.map(extractBlockData).filter(Boolean);
     } else if (key === "v" && clipboard.length > 0) {
         e.preventDefault();
