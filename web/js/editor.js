@@ -77,22 +77,40 @@ function addStaticBlockToInput(blockData, container, segment, offset) {
 window.addFunctionBlockToInput = addFunctionBlockToInput;
 window.addStaticBlockToInput = addStaticBlockToInput;
 
-// ブロック全体の選択・キーボード削除
-let selectedBlock = null;
+// ブロック全体の選択(Shift+クリックで複数選択)・コピペ・ドラッグ移動・キーボード削除
+const selectedBlocks = new Set();
+let lastSelectedBlock = null;
 
-function selectBlock(block) {
-    if (selectedBlock === block) return;
-    deselectBlock();
-    selectedBlock = block;
-    selectedBlock.classList.add("selected");
+function isTopLevelBlock(el) {
+    return !!el && el.parentElement === blocksBox &&
+        (el.classList.contains("block") || el.classList.contains("control-block"));
 }
 
-function deselectBlock() {
-    if (selectedBlock) {
-        selectedBlock.classList.remove("selected");
-        selectedBlock = null;
+function clearSelection() {
+    selectedBlocks.forEach(b => b.classList.remove("selected"));
+    selectedBlocks.clear();
+    lastSelectedBlock = null;
+}
+
+function selectOnly(block) {
+    clearSelection();
+    if (!block) return;
+    selectedBlocks.add(block);
+    block.classList.add("selected");
+    lastSelectedBlock = block;
+}
+
+function toggleSelect(block) {
+    if (selectedBlocks.has(block)) {
+        selectedBlocks.delete(block);
+        block.classList.remove("selected");
+    } else {
+        selectedBlocks.add(block);
+        block.classList.add("selected");
     }
+    lastSelectedBlock = block;
 }
+
 async function searchdocument(block) {
     if (!pywebviewReady) return;
     const spinFragment = spinTemplate.content.cloneNode(true);
@@ -113,36 +131,190 @@ document.body.addEventListener("click", (e) => {
     }
 
     const block = e.target.closest(".block, .control-block");
-    if (block) {
-        selectBlock(block);
-        searchdocument(block);
+    if (!block) {
+        clearSelection();
+        return;
+    }
+
+    searchdocument(block);
+
+    if (!isTopLevelBlock(block)) {
+        // 埋め込みチップ等ネストしたブロックは複数選択の対象外。
+        // ドキュメント表示のために単独選択の見た目だけ付ける
+        selectOnly(block);
+        return;
+    }
+
+    if (e.shiftKey) {
+        toggleSelect(block);
     } else {
-        deselectBlock();
+        selectOnly(block);
     }
 });
 
 document.addEventListener("keydown", (e) => {
     if (e.key !== "Delete" && e.key !== "Backspace") return;
-    if (!selectedBlock) return;
+    if (selectedBlocks.size === 0) return;
 
     const active = document.activeElement;
     const isEditing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
     if (isEditing) return;
 
     e.preventDefault();
-    selectedBlock.remove();
-    selectedBlock = null;
+    selectedBlocks.forEach(b => b.remove());
+    clearSelection();
 });
 
+// --- コピー(Ctrl+C) / 貼り付け(Ctrl+V) ---
+// ブロックのDOM要素にはイベントリスナーやgetValue等のメソッドが直接
+// アタッチされているため、cloneNode(true)では複製しても機能しない。
+// 元のblockData(createBlock/createControlBlockに渡した定義)を複製し、
+// 現在入力されている値をライブDOMから読み取って埋め込んだ上で、
+// createBlock/createControlBlockでもう一度組み立て直す。
+// (block_backで動的に増減する項目 [importの追加モジュール等] はコピー対象外)
+let clipboard = [];
+
+function isRenderableSlideItem(item) {
+    return !(item.type === "input" && item.input_type === "block");
+}
+
+function fillSlideValues(slideItems, liveContainer) {
+    if (!liveContainer) return;
+    const liveChildren = Array.from(liveContainer.children);
+    let liveIndex = 0;
+
+    slideItems.forEach(item => {
+        if (!isRenderableSlideItem(item)) return;
+        const live = liveChildren[liveIndex];
+        liveIndex++;
+
+        if (item.type === "input" && item.input_type === "text") {
+            item.value = live?.getValue ? live.getValue().value : "";
+        } else if (item.type === "checked") {
+            const warp = live?.querySelector?.(":scope > .input-text-container");
+            item.warp = { ...item.warp, value: warp?.getValue ? warp.getValue().value : "" };
+        }
+    });
+}
+
+function extractBlockData(el) {
+    if (!el?.blockData) return null;
+    const data = JSON.parse(JSON.stringify(el.blockData));
+
+    if (el.classList.contains("control-block")) {
+        fillSlideValues(
+            data.block_slide ?? [],
+            el.querySelector(":scope > .control-block-header > .control-block-header-content")
+        );
+
+        const bodyContent = el.querySelector(":scope > .control-block-body > .control-block-body-content");
+        const liveBodyBlocks = bodyContent
+            ? Array.from(bodyContent.children).filter(c => c.classList.contains("block") || c.classList.contains("control-block"))
+            : [];
+        data.block_body = liveBodyBlocks.map(extractBlockData).filter(Boolean);
+    } else {
+        fillSlideValues(data.block_slide ?? [], el.querySelector(":scope > .block-slide"));
+    }
+
+    return data;
+}
+
+function pasteClipboard() {
+    if (clipboard.length === 0) return;
+
+    const ref = lastSelectedBlock && isTopLevelBlock(lastSelectedBlock)
+        ? lastSelectedBlock.nextSibling
+        : null;
+
+    const pastedBlocks = [];
+    clipboard.forEach(data => {
+        const clonedData = JSON.parse(JSON.stringify(data));
+        const fragment = clonedData.type === "control" ? createControlBlock(clonedData) : createBlock(clonedData);
+        if (!fragment) return;
+
+        const el = fragment.firstElementChild;
+        blocksBox.insertBefore(fragment, ref);
+        pastedBlocks.push(el);
+    });
+
+    if (pastedBlocks.length === 0) return;
+
+    clearSelection();
+    pastedBlocks.forEach(el => {
+        selectedBlocks.add(el);
+        el.classList.add("selected");
+    });
+    lastSelectedBlock = pastedBlocks[pastedBlocks.length - 1];
+}
+
+document.addEventListener("keydown", (e) => {
+    const ctrlOrCmd = e.ctrlKey || e.metaKey;
+    if (!ctrlOrCmd) return;
+
+    const active = document.activeElement;
+    const isEditing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+    if (isEditing) return; // テキスト編集中は通常のコピー&ペーストを優先する
+
+    const key = e.key.toLowerCase();
+    if (key === "c" && selectedBlocks.size > 0) {
+        e.preventDefault();
+        const ordered = Array.from(blocksBox.children).filter(el => selectedBlocks.has(el));
+        clipboard = ordered.map(extractBlockData).filter(Boolean);
+    } else if (key === "v" && clipboard.length > 0) {
+        e.preventDefault();
+        pasteClipboard();
+    }
+});
+
+// --- 既存ブロックのドラッグによる並び替え ---
+let draggingBlocks = null;
+
+function makeDragHandle(handleEl) {
+    handleEl.draggable = true;
+
+    handleEl.addEventListener("dragstart", (e) => {
+        const block = handleEl.closest(".block, .control-block");
+        if (!isTopLevelBlock(block)) return;
+
+        draggingBlocks = selectedBlocks.has(block)
+            ? Array.from(blocksBox.children).filter(el => selectedBlocks.has(el))
+            : [block];
+
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");
+    });
+
+    handleEl.addEventListener("dragend", () => {
+        draggingBlocks = null;
+    });
+}
+
+// 既存ブロックの並び替えドラッグ中は、blocks-box内のどこにドロップしても
+// 受け付ける。それ以外(ツールボックスからの新規ブロック)は、
 // blocks-box の何もない場所だけをドロップターゲット化する
 // （他のブロックやツールボックスの上にドロップしても新規ブロックを作らない）
 blocksBox.addEventListener("dragover", (e) => {
+    if (draggingBlocks) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        return;
+    }
+
     if (e.target !== blocksBox) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
 });
 
 blocksBox.addEventListener("drop", (e) => {
+    if (draggingBlocks) {
+        e.preventDefault();
+        const ref = getTopLevelBlockBelow(e.clientY);
+        const safeRef = draggingBlocks.includes(ref) ? null : ref;
+        draggingBlocks.forEach(block => blocksBox.insertBefore(block, safeRef));
+        draggingBlocks = null;
+        return;
+    }
+
     if (e.target !== blocksBox) return;
     e.preventDefault();
     const data = e.dataTransfer.getData("application/json");
@@ -166,6 +338,7 @@ function createBlock(blockData) {
     const blockBack = blockData.block_back ?? [];
 
     color.style.backgroundColor = blockData.block_color;
+    makeDragHandle(color);
 
     blockSlide.forEach(element => {
         const created = createElement(element);
@@ -185,6 +358,7 @@ function createBlock(blockData) {
     block.getFuncName = blockData.block_label;
     block.getModuleName = blockData.block_module;
     block.getTag = blockData.block_tag;
+    block.blockData = blockData;
 
     return fragment;
 }
@@ -201,6 +375,7 @@ function createControlBlock(blockData) {
     const blockBack = blockData.block_back ?? [];
 
     color.style.backgroundColor = blockData.block_color;
+    makeDragHandle(color);
 
     blockSlide.forEach(element => {
         const created = createElement(element);
@@ -231,6 +406,7 @@ function createControlBlock(blockData) {
     control.getFuncName = blockData.block_label;
     control.getModuleName = blockData.block_module;
     control.getTag = blockData.block_tag;
+    control.blockData = blockData;
     return fragment;
 }
 
@@ -248,6 +424,25 @@ document.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     toolsBox.style.top = `${event.clientY}px`;
     toolsBox.style.left = `${event.clientX}px`;
+});
+
+// --- File > Open file (.pyを読み込んでブロックに変換する) ---
+document.getElementById("menu-open-file")?.addEventListener("click", async (e) => {
+    if (!pywebviewReady) return;
+
+    const { blocks, skipped, error } = await pywebview.api.load_python_file_dialog();
+    if (error) {
+        console.error(`Load failed: ${error}`);
+    } else {
+        (blocks ?? []).forEach(blockData => {
+            const created = blockData.type === "control" ? createControlBlock(blockData) : createBlock(blockData);
+            if (created) blocksBox.appendChild(created);
+        });
+        if (skipped) {
+            console.warn(`${skipped} statement(s) could not be converted to blocks and were skipped.`);
+        }
+    }
+    e.target.closest("details")?.removeAttribute("open");
 });
 
 toolsBoxInput.addEventListener("input", async () => {
