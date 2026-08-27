@@ -5,7 +5,6 @@ export const blocksData = {
             "name": "import",
             "block_module": "builtins",
             "block_label": "__import__",
-            "block_tag": "import",
             "block_color": "#25d45a",
             "block_slide": [
                 {
@@ -57,7 +56,6 @@ export const blocksData = {
             "name": "=",
             "block_module": "",
             "block_label": "=",
-            "block_tag": "=",
             "block_color": "#caaa40",
             "block_slide": [
                 {
@@ -81,7 +79,6 @@ export const blocksData = {
             "name": "for",
             "block_module": "",
             "block_label": "for",
-            "block_tag": "",
             "block_color": "#eeeb3c",
             "block_slide": [
                 {
@@ -92,6 +89,15 @@ export const blocksData = {
                     "type": "input",
                     "input_type": "text",
                     "placeholder": "variable name"
+                },
+                {
+                    "type": "label",
+                    "text": "in"
+                },
+                {
+                    "type": "input",
+                    "input_type": "text",
+                    "placeholder": "list"
                 },
                 {
                     "type": "label",

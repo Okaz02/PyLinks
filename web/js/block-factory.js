@@ -35,7 +35,6 @@ function createBlock(blockData) {
     });
     block.getFuncName = blockData.block_label;
     block.getModuleName = blockData.block_module;
-    block.getTag = blockData.block_tag;
     block.blockData = blockData;
 
     return fragment;
@@ -83,7 +82,6 @@ function createControlBlock(blockData) {
 
     control.getFuncName = blockData.block_label;
     control.getModuleName = blockData.block_module;
-    control.getTag = blockData.block_tag;
     control.blockData = blockData;
     return fragment;
 }

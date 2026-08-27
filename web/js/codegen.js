@@ -52,7 +52,7 @@ function importBlockToCode(block) {
 }
 
 function blockToCode(block) {
-    if (block.getTag === "import") return importBlockToCode(block);
+    if (block.getModuleName === "builtins" && block.getFuncName === "__import__") return importBlockToCode(block);
     return slideToCode(block.querySelector(":scope > .block-slide"));
 }
 
