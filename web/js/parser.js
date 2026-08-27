@@ -194,11 +194,16 @@ function createTextInputElement(element) {
 
         const data = e.dataTransfer.getData("application/json");
         if (!data) return;
-        const { moduleName, functionName } = JSON.parse(data);
+        const parsed = JSON.parse(data);
 
         const target = e.target.classList?.contains("segment-input") ? e.target : findNearestSegment(e.clientX, e.clientY);
         const offset = target ? getTextOffsetAtX(target, e.clientX) : 0;
-        window.addFunctionBlockToInput(moduleName, functionName, container, target, offset);
+
+        if (parsed.kind === "block") {
+            window.addStaticBlockToInput(parsed.blockData, container, target, offset);
+        } else {
+            window.addFunctionBlockToInput(parsed.moduleName, parsed.functionName, container, target, offset);
+        }
     });
 
     return container;
