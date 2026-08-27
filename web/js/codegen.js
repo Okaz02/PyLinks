@@ -1,5 +1,8 @@
 // ブロックツリーをPythonコードに変換し、変更のたびにconsole.logへ出力する
 
+let pywebviewReady = !!window.pywebview;
+window.addEventListener('pywebviewready', () => { pywebviewReady = true; }, { once: true });
+
 const blocksBox = document.getElementById("blocks-box");
 
 function indent(depth) {
@@ -100,3 +103,16 @@ new MutationObserver(scheduleLog).observe(blocksBox, {
 blocksBox.addEventListener("input", scheduleLog);
 
 scheduleLog();
+
+// --- File > Export ---
+// 現在のブロックツリーから生成したPythonコードを、ネイティブの保存ダイアログで
+// 選んだ .py ファイルに書き出す
+document.getElementById("menu-export")?.addEventListener("click", async (e) => {
+    if (!pywebviewReady) return;
+
+    const result = await pywebview.api.save_python_file_dialog(generateCode());
+    if (result?.error) {
+        console.error(`Export failed: ${result.error}`);
+    }
+    e.target.closest("details")?.removeAttribute("open");
+});
