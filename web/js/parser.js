@@ -79,7 +79,9 @@ function createTextInputElement(element) {
 
     const mergeAcrossChip = (prevInput, chip, nextInput) => {
         const mergedPos = prevInput.value.length;
+        const oldValue = prevInput.value;
         prevInput.value += nextInput.value;
+        window.recordValueChange?.(prevInput, oldValue, prevInput.value);
         chip.remove();
         nextInput.remove();
         focusSegment(prevInput, mergedPos);
@@ -133,7 +135,7 @@ function createTextInputElement(element) {
         return input;
     };
 
-    container.appendChild(createSegment("", element.placeholder));
+    container.appendChild(createSegment(element.value ?? "", element.placeholder));
 
     container.getValue = () => ({ kind: "text", value: getSegments().map(input => input.value).join("") });
     container.onChangeValue = (callback) => { listeners.push(callback); };
