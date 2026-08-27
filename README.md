@@ -61,5 +61,4 @@ DISPLAY=host.docker.internal:0 docker compose up --build
 
 ### 補足
 
-- GUI を表示しない CLI/lint/test 用途であれば、X11 の設定なしで `docker compose run pylinks python -c "..."` のように利用できます。
 - `docker-compose.yml` はカレントディレクトリをコンテナにマウントしているため、コード変更が即座に反映されます。
