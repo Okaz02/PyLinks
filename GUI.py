@@ -3,7 +3,7 @@ import importlib
 import importlib.util
 import inspect
 import builtins
-from typing import Optional
+from typing import Callable, Optional
 import argostranslate.package
 import argostranslate.translate
 
@@ -148,13 +148,15 @@ class Api:
             for func_name in func_names
         ]
 
-    def get_function_signature(self, module_name: str, func_name: str) -> dict:
+    def _resolve_function(
+        self, module_name: str, func_name: str
+    ) -> tuple[Optional[Callable], Optional[str]]:
         """
-        指定した関数のシグネチャ情報を取得する。
-        引数情報を {名前: デフォルト値} の形式で返す。
+        module_name/func_name から呼び出し可能オブジェクトを解決する。
+        (関数, エラー文言) のタプルを返す。解決できなければ関数側はNone。
         """
         if not self.check_module_exists(module_name):
-            return {"params": [], "error": f"Module {module_name} not found"}
+            return None, f"Module {module_name} not found"
 
         try:
             if module_name == "builtins" or (
@@ -165,54 +167,65 @@ class Api:
             else:
                 module = importlib.import_module(module_name)
         except Exception as e:
-            return {"params": [], "error": str(e)}
+            return None, str(e)
 
         func = getattr(module, func_name, None)
         if not callable(func):
-            return {"params": [], "error": f"{func_name} is not callable"}
+            return None, f"{func_name} is not callable"
+
+        return func, None
+
+    def get_function_block(self, module_name: str, func_name: str) -> dict:
+        """
+        指定した関数を、web/block/blocks.js と同じスキーマのブロックJSONに変換する。
+        ブロックの見た目(ラベル/入力欄の並び)はここで組み立て、
+        フロントエンドはそれをそのままcreateBlockに渡すだけにする。
+        """
+        func, error = self._resolve_function(module_name, func_name)
+        if error or func is None:
+            return {"block": None, "error": error}
 
         try:
             sig = inspect.signature(func)
-            params = []
-            for param_name, param in sig.parameters.items():
-                if param_name in ("self", "cls"):
-                    continue
-                params.append(
-                    {
-                        "name": param_name,
-                        "default": (
-                            str(param.default)
-                            if param.default != inspect.Parameter.empty
-                            else None
-                        ),
-                        "kind": str(param.kind),
-                    }
-                )
-            return {"params": params, "error": None}
+            param_names = [
+                name for name in sig.parameters if name not in ("self", "cls")
+            ]
         except (ValueError, TypeError):
-            return {"params": [], "error": "Could not get signature"}
+            param_names = []
+
+        label = (
+            f"{func_name}("
+            if module_name == "builtins"
+            else f"{module_name}.{func_name}("
+        )
+
+        block_slide = [{"type": "label", "text": label}]
+        for index, param_name in enumerate(param_names):
+            if index > 0:
+                block_slide.append({"type": "label", "text": ","})
+            block_slide.append(
+                {"type": "input", "input_type": "text", "placeholder": param_name}
+            )
+        block_slide.append({"type": "label", "text": ")"})
+
+        block = {
+            "type": "block",
+            "block_module": module_name,
+            "block_label": func_name,
+            "block_tag": "function_call",
+            "block_color": "#3498db",
+            "block_slide": block_slide,
+            "block_back": [],
+        }
+        return {"block": block, "error": None}
 
     def get_translated_doc(self, module_name: str, func_name: str) -> dict:
         """
         指定した関数のドキュメント(docstring)を取得し、日本語に翻訳して返す。
         """
-        if not self.check_module_exists(module_name):
-            return {"doc": None, "error": f"Module {module_name} not found"}
-
-        try:
-            if module_name == "builtins" or (
-                hasattr(builtins, func_name)
-                and not importlib.util.find_spec(module_name)
-            ):
-                module = builtins
-            else:
-                module = importlib.import_module(module_name)
-        except Exception as e:
-            return {"doc": None, "error": str(e)}
-
-        func = getattr(module, func_name, None)
-        if not callable(func):
-            return {"doc": None, "error": f"{func_name} is not callable"}
+        func, error = self._resolve_function(module_name, func_name)
+        if error or func is None:
+            return {"doc": None, "error": error}
 
         doc = inspect.getdoc(func)
         if not doc:
