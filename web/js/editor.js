@@ -21,7 +21,7 @@ function createFunctionBlockData(moduleName, functionName, params = []) {
     if (moduleName === "builtins") {
         labelName = `${functionName}(`
     } else {
-        labelName = `${moduleName}${functionName}(`;
+        labelName = `${moduleName}.${functionName}(`;
     }
     const blockSlide = [
         { type: "label", text: labelName }
@@ -196,6 +196,7 @@ function createBlock(blockData) {
     });
     block.getFuncName = blockData.block_label;
     block.getModuleName = blockData.block_module;
+    block.getTag = blockData.block_tag;
 
     return fragment;
 }
@@ -241,6 +242,7 @@ function createControlBlock(blockData) {
 
     control.getFuncName = blockData.block_label;
     control.getModuleName = blockData.block_module;
+    control.getTag = blockData.block_tag;
     return fragment;
 }
 
