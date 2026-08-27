@@ -92,6 +92,10 @@ export const blocksData = {
                     "type": "input",
                     "input_type": "text",
                     "placeholder": "variable name"
+                },
+                {
+                    "type": "label",
+                    "text": ":"
                 }
             ],
             "block_back": []
