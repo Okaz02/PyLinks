@@ -2,6 +2,7 @@ export const blocksData = {
     "blocks": [
         {
             "type": "block",
+            "name": "import",
             "block_module": "builtins",
             "block_label": "__import__",
             "block_tag": "import",
@@ -53,6 +54,7 @@ export const blocksData = {
         },
         {
             "type": "block",
+            "name": "assign",
             "block_module": "",
             "block_label": "",
             "block_tag": "=",
