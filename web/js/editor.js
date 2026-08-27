@@ -90,8 +90,30 @@ async function addFunctionBlockToInput(moduleName, functionName, container, segm
     }
 }
 
+// blocks.jsで定義済みの定型ブロック(import, assignなど)を配置する
+// 関数呼び出しと違いシグネチャ取得が不要なので同期的に作れる
+function addStaticBlock(blockData, dropY) {
+    const created = blockData.type === "control" ? createControlBlock(blockData) : createBlock(blockData);
+
+    if (created) {
+        const ref = typeof dropY === "number" ? getTopLevelBlockBelow(dropY) : null;
+        blocksBox.insertBefore(created, ref);
+    }
+}
+
+function addStaticBlockToInput(blockData, container, segment, offset) {
+    const created = blockData.type === "control" ? createControlBlock(blockData) : createBlock(blockData);
+
+    if (created) {
+        const blockElement = created.querySelector?.(".block, .control-block") || created;
+        blockElement.classList.add("function-chip");
+        container.insertChip(blockElement, segment, offset);
+    }
+}
+
 // グローバルに割り当て
 window.addFunctionBlockToInput = addFunctionBlockToInput;
+window.addStaticBlockToInput = addStaticBlockToInput;
 
 // ブロック全体の選択・キーボード削除
 let selectedBlock = null;
@@ -162,9 +184,13 @@ blocksBox.addEventListener("drop", (e) => {
     if (e.target !== blocksBox) return;
     e.preventDefault();
     const data = e.dataTransfer.getData("application/json");
-    if (data) {
-        const { moduleName, functionName } = JSON.parse(data);
-        addFunctionBlock(moduleName, functionName, e.clientY);
+    if (!data) return;
+
+    const parsed = JSON.parse(data);
+    if (parsed.kind === "block") {
+        addStaticBlock(parsed.blockData, e.clientY);
+    } else {
+        addFunctionBlock(parsed.moduleName, parsed.functionName, e.clientY);
     }
 });
 
@@ -270,9 +296,44 @@ toolsBoxInput.addEventListener("input", async () => {
         .map(input => input.getValue().value)
         .filter(Boolean);
 
-    const functions = await pywebview.api.search_functions(["builtins", ...moduleNames], toolsBoxInput.value);
+    const query = toolsBoxInput.value;
+    const functions = await pywebview.api.search_functions(["builtins", ...moduleNames], query);
 
     toolsBoxBody.innerHTML = "";
+
+    if (query) {
+        const matchedBlocks = blocksData.blocks.filter(blockData =>
+            (blockData.name ?? "").toLowerCase().includes(query.toLowerCase())
+        );
+
+        if (matchedBlocks.length) {
+            const details = document.createElement("details");
+            details.className = "tools-box-group";
+
+            const summary = document.createElement("summary");
+            summary.textContent = `blocks (${matchedBlocks.length})`;
+            details.appendChild(summary);
+
+            matchedBlocks.forEach(blockData => {
+                const blockLabel = document.createElement("p");
+                blockLabel.className = "tools-box-function";
+                blockLabel.textContent = blockData.name;
+                blockLabel.draggable = true;
+
+                blockLabel.addEventListener("dragstart", (e) => {
+                    e.dataTransfer.effectAllowed = "copy";
+                    e.dataTransfer.setData("application/json", JSON.stringify({
+                        kind: "block",
+                        blockData
+                    }));
+                });
+
+                details.appendChild(blockLabel);
+            });
+
+            toolsBoxBody.appendChild(details);
+        }
+    }
 
     Object.entries(functions).forEach(([moduleName, arr]) => {
         const details = document.createElement("details");
@@ -291,6 +352,7 @@ toolsBoxInput.addEventListener("input", async () => {
             functionLabel.addEventListener("dragstart", (e) => {
                 e.dataTransfer.effectAllowed = "copy";
                 e.dataTransfer.setData("application/json", JSON.stringify({
+                    kind: "function",
                     moduleName: moduleName,
                     functionName: element
                 }));
