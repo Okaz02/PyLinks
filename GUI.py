@@ -1,3 +1,4 @@
+import ast
 import webview
 import importlib
 import importlib.util
@@ -193,6 +194,24 @@ class Api:
         except (ValueError, TypeError):
             param_names = []
 
+        return {
+            "block": self._build_call_block(module_name, func_name, param_names),
+            "error": None,
+        }
+
+    def _build_call_block(
+        self,
+        module_name: str,
+        func_name: str,
+        param_names: list[str],
+        arg_sources: Optional[list[str]] = None,
+    ) -> dict:
+        """
+        関数呼び出しブロックのJSONを組み立てる。
+        arg_sources を渡すと、対応する引数欄に初期値として埋め込む
+        (.pyファイル読み込み時に、実際に渡されていた引数の式をそのまま復元するため)
+        """
+        arg_sources = arg_sources or []
         label = (
             f"{func_name}("
             if module_name == "builtins"
@@ -200,15 +219,18 @@ class Api:
         )
 
         block_slide = [{"type": "label", "text": label}]
-        for index, param_name in enumerate(param_names):
+        for index in range(max(len(param_names), len(arg_sources))):
             if index > 0:
                 block_slide.append({"type": "label", "text": ","})
-            block_slide.append(
-                {"type": "input", "input_type": "text", "placeholder": param_name}
-            )
+            item = {"type": "input", "input_type": "text"}
+            if index < len(param_names):
+                item["placeholder"] = param_names[index]
+            if index < len(arg_sources):
+                item["value"] = arg_sources[index]
+            block_slide.append(item)
         block_slide.append({"type": "label", "text": ")"})
 
-        block = {
+        return {
             "type": "block",
             "block_module": module_name,
             "block_label": func_name,
@@ -217,7 +239,185 @@ class Api:
             "block_slide": block_slide,
             "block_back": [],
         }
-        return {"block": block, "error": None}
+
+    def _build_import_block(self, module_name: str) -> dict:
+        return {
+            "type": "block",
+            "name": "import",
+            "block_module": "builtins",
+            "block_label": "__import__",
+            "block_tag": "import",
+            "block_color": "#25d45a",
+            "block_slide": [
+                {"type": "label", "text": "import"},
+                {
+                    "type": "checked",
+                    "check": "import_module",
+                    "when": "blur",
+                    "warp": {
+                        "type": "input",
+                        "input_type": "text",
+                        "system": "import_module",
+                        "value": module_name,
+                    },
+                    "on_success": [],
+                    "on_fail": [{"type": "label", "text": "⚠️"}],
+                },
+            ],
+            "block_back": [],
+        }
+
+    def _build_assign_block(self, target_name: str, value_source: str) -> dict:
+        return {
+            "type": "block",
+            "name": "assign",
+            "block_module": "",
+            "block_label": "",
+            "block_tag": "=",
+            "block_color": "#caaa40",
+            "block_slide": [
+                {
+                    "type": "input",
+                    "input_type": "text",
+                    "placeholder": "variable name",
+                    "value": target_name,
+                },
+                {"type": "label", "text": "="},
+                {"type": "input", "input_type": "text", "value": value_source},
+                {"type": "input", "input_type": "block", "system": "add-block"},
+                {"type": "input", "input_type": "text"},
+            ],
+            "block_back": [],
+        }
+
+    def _resolve_call_name(self, func_node) -> Optional[tuple[str, str]]:
+        """
+        Call式のfunc部分から (module_name, func_name) を判定する。
+        `print(...)` のような単純名は builtins、`os.listdir(...)` のような
+        `モジュール.関数` の形だけをサポートする。それ以外(メソッドチェーン等)はNone。
+        """
+        if isinstance(func_node, ast.Name):
+            return "builtins", func_node.id
+        if isinstance(func_node, ast.Attribute) and isinstance(func_node.value, ast.Name):
+            return func_node.value.id, func_node.attr
+        return None
+
+    def _call_to_block(self, call_node: ast.Call) -> Optional[dict]:
+        resolved = self._resolve_call_name(call_node.func)
+        if resolved is None:
+            return None
+        module_name, func_name = resolved
+
+        func, error = self._resolve_function(module_name, func_name)
+        param_names: list[str] = []
+        if not error and func is not None:
+            try:
+                sig = inspect.signature(func)
+                param_names = [
+                    name for name in sig.parameters if name not in ("self", "cls")
+                ]
+            except (ValueError, TypeError):
+                param_names = []
+
+        try:
+            arg_sources = [ast.unparse(arg) for arg in call_node.args]
+        except Exception:
+            return None
+
+        return self._build_call_block(module_name, func_name, param_names, arg_sources)
+
+    def _statement_to_blocks(self, node: ast.stmt) -> list[dict]:
+        """
+        トップレベルの文を、対応可能な範囲でブロックJSONのリストに変換する。
+        対応: import文、単純な変数への代入文、関数呼び出し文のみ。
+        それ以外(if/for/def/class 等)は空リストを返す(=読み込み時にスキップされる)。
+        """
+        if isinstance(node, ast.Import):
+            return [self._build_import_block(alias.name) for alias in node.names]
+
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            try:
+                value_source = ast.unparse(node.value)
+            except Exception:
+                return []
+            return [self._build_assign_block(node.targets[0].id, value_source)]
+
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            block = self._call_to_block(node.value)
+            return [block] if block else []
+
+        return []
+
+    def load_python_file(self, path: str) -> dict:
+        """
+        .pyファイルを読み込み、対応可能な範囲でブロックJSONのリストに変換する。
+        変換できなかった文の数を skipped で返す。
+        """
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+        except OSError as e:
+            return {"blocks": [], "skipped": 0, "error": str(e)}
+
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as e:
+            return {"blocks": [], "skipped": 0, "error": f"Syntax error: {e}"}
+
+        blocks: list[dict] = []
+        skipped = 0
+        for node in tree.body:
+            node_blocks = self._statement_to_blocks(node)
+            if node_blocks:
+                blocks.extend(node_blocks)
+            else:
+                skipped += 1
+
+        return {"blocks": blocks, "skipped": skipped, "error": None}
+
+    def load_python_file_dialog(self) -> dict:
+        """
+        ネイティブのファイル選択ダイアログで.pyファイルを選ばせ、
+        読み込んでブロックJSONのリストに変換する。
+        """
+        if self._window is None:
+            return {"blocks": [], "skipped": 0, "error": "Window not ready"}
+
+        paths = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            file_types=("Python files (*.py)", "All files (*.*)"),
+        )
+        if not paths:
+            return {"blocks": [], "skipped": 0, "error": None}
+
+        return self.load_python_file(paths[0])
+
+    def save_python_file_dialog(self, code: str) -> dict:
+        """
+        ネイティブの保存ダイアログでパスを選ばせ、渡されたPythonコードを書き出す。
+        """
+        if self._window is None:
+            return {"error": "Window not ready"}
+
+        paths = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename="untitled.py",
+            file_types=("Python files (*.py)", "All files (*.*)"),
+        )
+        if not paths:
+            return {"error": None}
+
+        try:
+            with open(paths[0], "w", encoding="utf-8") as f:
+                f.write(code)
+        except OSError as e:
+            return {"error": str(e)}
+
+        return {"error": None}
 
     def get_translated_doc(self, module_name: str, func_name: str) -> dict:
         """
