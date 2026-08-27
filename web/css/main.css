@@ -65,6 +65,7 @@ body {
     width: 10px;
     flex-shrink: 0;
     align-self: stretch;
+    cursor: grab;
 }
 
 .block-label {
@@ -272,6 +273,7 @@ body {
     top: 0;
     bottom: 0;
     width: 10px;
+    cursor: grab;
 }
 
 .control-block-header-content {
