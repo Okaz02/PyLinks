@@ -62,7 +62,8 @@ export const blocksData = {
             "block_slide": [
                 {
                     "type": "input",
-                    "input_type": "text"
+                    "input_type": "text",
+                    "placeholder": "variable name"
                 },
                 {
                     "type": "label",
