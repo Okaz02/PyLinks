@@ -1,0 +1,39 @@
+{
+    "score_scale": 400,
+    "default_color": "#3498db",
+    "arithmetic_ops": ["Add", "Sub", "Mult", "Div", "FloorDiv", "Mod", "Pow"],
+    "categories": [
+        {
+            "name": "math",
+            "color": "#e67e22",
+            "arithmetic": true,
+            "modules": ["math", "cmath", "statistics", "decimal", "fractions"]
+        },
+        {
+            "name": "string",
+            "color": "#9b59b6",
+            "modules": ["re", "string", "textwrap"]
+        },
+        {
+            "name": "file_io",
+            "color": "#2ecc71",
+            "modules": ["os", "os.path", "shutil", "pathlib", "io"],
+            "calls": ["open"]
+        },
+        {
+            "name": "network",
+            "color": "#e74c3c",
+            "modules": ["socket", "urllib", "http", "requests"]
+        },
+        {
+            "name": "datetime",
+            "color": "#f1c40f",
+            "modules": ["datetime", "time", "calendar"]
+        },
+        {
+            "name": "data_structure",
+            "color": "#1abc9c",
+            "modules": ["collections", "itertools", "heapq", "bisect", "functools"]
+        }
+    ]
+}

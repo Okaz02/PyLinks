@@ -1,12 +1,61 @@
 import ast
+import json
+import textwrap
 import webview
 import importlib
 import importlib.util
 import inspect
 import builtins
+from pathlib import Path
 from typing import Callable, Optional
 import argostranslate.package
 import argostranslate.translate
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    hex_color = hex_color.lstrip("#")
+    return (int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
+
+
+def _load_block_color_rules() -> dict:
+    """
+    関数呼び出しブロックの色を決めるルールを block_color_rules.json から読み込む。
+    カテゴリ(math/string/file_io/network/datetime/data_structureなど)ごとに
+    「どのモジュール参照/呼び出しをそのカテゴリの兆候とみなすか」と色を定義する。
+    関数の中身(AST)を解析してカテゴリごとにスコアをつけ、
+    最もスコアの高いカテゴリの色へ、default_colorから連続的に近づける
+    """
+    path = Path(__file__).parent / "block_color_rules.json"
+    with path.open(encoding="utf-8") as f:
+        rules = json.load(f)
+
+    module_to_category: dict[str, str] = {}
+    call_to_category: dict[str, str] = {}
+    arithmetic_categories: list[str] = []
+    category_colors: dict[str, tuple[int, int, int]] = {}
+
+    for category in rules["categories"]:
+        name = category["name"]
+        category_colors[name] = _hex_to_rgb(category["color"])
+        for module_name in category.get("modules", []):
+            module_to_category[module_name] = name
+        for call_name in category.get("calls", []):
+            call_to_category[call_name] = name
+        if category.get("arithmetic"):
+            arithmetic_categories.append(name)
+
+    return {
+        "arithmetic_ops": tuple(getattr(ast, name) for name in rules["arithmetic_ops"]),
+        "score_scale": rules["score_scale"],
+        "default_color": _hex_to_rgb(rules["default_color"]),
+        "module_to_category": module_to_category,
+        "call_to_category": call_to_category,
+        "arithmetic_categories": arithmetic_categories,
+        "category_colors": category_colors,
+    }
+
+
+_BLOCK_COLOR_RULES = _load_block_color_rules()
 
 
 class Api:
@@ -195,9 +244,81 @@ class Api:
             param_names = []
 
         return {
-            "block": self._build_call_block(module_name, func_name, param_names),
+            "block": self._build_call_block(module_name, func_name, param_names, func=func),
             "error": None,
         }
+
+    def _category_scores(self, module_name: str, func: Optional[Callable]) -> dict[str, float]:
+        """
+        関数の中身が各カテゴリ(math/string/file_io/network/datetime/data_structureなど、
+        block_color_rules.json参照)にどれだけ当てはまるかを0〜100のスコアで返す。
+        関数のAST中で、そのカテゴリのモジュールへの参照/関数呼び出しが
+        全体に占める割合をスコアにする。
+        C実装でソースが読めない組み込み関数(math.sqrt等)は、
+        代わりに所属モジュール名からカテゴリを1つ直接あてる
+        """
+        rules = _BLOCK_COLOR_RULES
+
+        try:
+            source = inspect.getsource(func) if func is not None else None
+        except (OSError, TypeError):
+            source = None
+
+        if source is None:
+            category = rules["module_to_category"].get(module_name)
+            return {category: 100.0} if category else {}
+
+        try:
+            tree = ast.parse(textwrap.dedent(source))
+        except SyntaxError:
+            return {}
+
+        hits: dict[str, int] = {}
+        total_nodes = 0
+        for node in ast.walk(tree):
+            total_nodes += 1
+            if isinstance(node, ast.BinOp) and isinstance(node.op, rules["arithmetic_ops"]):
+                for category in rules["arithmetic_categories"]:
+                    hits[category] = hits.get(category, 0) + 1
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                category = rules["module_to_category"].get(node.value.id)
+                if category:
+                    hits[category] = hits.get(category, 0) + 1
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                category = rules["call_to_category"].get(node.func.id)
+                if category:
+                    hits[category] = hits.get(category, 0) + 1
+
+        if total_nodes == 0:
+            return {}
+
+        return {
+            category: min(100.0, (count / total_nodes) * rules["score_scale"])
+            for category, count in hits.items()
+        }
+
+    def _pick_block_color(self, scores: dict[str, float]) -> str:
+        """
+        カテゴリごとのスコアのうち最も高いものを採用し、default_colorから
+        そのカテゴリの色へ、スコアに応じて連続的に近づけた色を返す
+        """
+        rules = _BLOCK_COLOR_RULES
+        default_color = rules["default_color"]
+
+        if not scores:
+            return "#{:02x}{:02x}{:02x}".format(*default_color)
+
+        category, score = max(scores.items(), key=lambda item: item[1])
+        if score <= 0:
+            return "#{:02x}{:02x}{:02x}".format(*default_color)
+
+        category_color = rules["category_colors"][category]
+        t = max(0.0, min(1.0, score / 100))
+        rgb = (
+            round(default_color[i] + (category_color[i] - default_color[i]) * t)
+            for i in range(3)
+        )
+        return "#{:02x}{:02x}{:02x}".format(*rgb)
 
     def _build_call_block(
         self,
@@ -205,6 +326,7 @@ class Api:
         func_name: str,
         param_names: list[str],
         arg_sources: Optional[list[str]] = None,
+        func: Optional[Callable] = None,
     ) -> dict:
         """
         関数呼び出しブロックのJSONを組み立てる。
@@ -235,7 +357,7 @@ class Api:
             "block_module": module_name,
             "block_label": func_name,
             "block_tag": "function_call",
-            "block_color": "#3498db",
+            "block_color": self._pick_block_color(self._category_scores(module_name, func)),
             "block_slide": block_slide,
             "block_back": [],
         }
@@ -324,7 +446,7 @@ class Api:
         except Exception:
             return None
 
-        return self._build_call_block(module_name, func_name, param_names, arg_sources)
+        return self._build_call_block(module_name, func_name, param_names, arg_sources, func=func)
 
     def _statement_to_blocks(self, node: ast.stmt) -> list[dict]:
         """
